@@ -3,14 +3,15 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
 	TelegramBotToken  string
-	GeminiAPIKey      string
-	ElevenLabsAPIKey  string
+	GeminiAPIKeys     []string
+	ElevenLabsAPIKeys []string
 	ElevenLabsModelID string
 	DefaultLang       string
 	DatabasePath      string
@@ -21,10 +22,13 @@ func LoadConfig() *Config {
 		log.Println("No .env file found, using environment variables")
 	}
 
+	geminiKeys := strings.Split(getEnv("GEMINI_API_KEYS", ""), ",")
+	elevenKeys := strings.Split(getEnv("ELEVENLABS_API_KEYS", ""), ",")
+
 	return &Config{
 		TelegramBotToken:  getEnv("TELEGRAM_BOT_TOKEN", ""),
-		GeminiAPIKey:      getEnv("GEMINI_API_KEY", ""),
-		ElevenLabsAPIKey:  getEnv("ELEVENLABS_API_KEY", ""),
+		GeminiAPIKeys:     geminiKeys,
+		ElevenLabsAPIKeys: elevenKeys,
 		ElevenLabsModelID: getEnv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2"),
 		DefaultLang:       getEnv("DEFAULT_LANG", "en"),
 		DatabasePath:      getEnv("DATABASE_PATH", "./bot_data.db"),

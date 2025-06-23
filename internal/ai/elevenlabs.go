@@ -5,54 +5,45 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"time"
+	"video-script-bot/internal/apikeys"
 	"video-script-bot/internal/models"
 )
 
 const elevenLabsAPIURL = "https://api.elevenlabs.io/v1"
 
 type ElevenLabsService struct {
-	apiKey     string
+	keyManager *apikeys.KeyManager
 	modelID    string
 	httpClient *http.Client
 	voices     []models.Voice
 }
 
-func NewElevenLabsService(apiKey, modelID string) (*ElevenLabsService, error) {
+func NewElevenLabsService(keyManager *apikeys.KeyManager, modelID string) (*ElevenLabsService, error) {
 	service := &ElevenLabsService{
-		apiKey:  apiKey,
-		modelID: modelID,
+		keyManager: keyManager,
+		modelID:    modelID,
 		httpClient: &http.Client{
-			Timeout: time.Minute * 2, // 2-minute timeout for TTS requests
+			Timeout: time.Minute * 2,
 		},
 	}
-
 	if err := service.loadVoicesFromFile("voices.json"); err != nil {
 		return nil, fmt.Errorf("failed to load voices from file: %w", err)
 	}
-
 	return service, nil
 }
 
 func (s *ElevenLabsService) loadVoicesFromFile(filePath string) error {
 	file, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
+	if err != nil { return err }
 	defer file.Close()
-
 	bytes, err := io.ReadAll(file)
-	if err != nil {
-		return err
-	}
-
+	if err != nil { return err }
 	var voicesFile models.VoicesFile
-	if err := json.Unmarshal(bytes, &voicesFile); err != nil {
-		return err
-	}
-
+	if err := json.Unmarshal(bytes, &voicesFile); err != nil { return err }
 	s.voices = voicesFile.Voices
 	return nil
 }
@@ -67,34 +58,42 @@ func (s *ElevenLabsService) TextToSpeech(voiceID, text string) ([]byte, error) {
 		"text":     text,
 		"model_id": s.modelID,
 	}
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal TTS payload: %w", err)
-	}
+	jsonPayload, _ := json.Marshal(payload)
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create TTS request: %w", err)
-	}
-	req.Header.Set("xi-api-key", s.apiKey)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "audio/mpeg")
+	// Retry logic with key rotation
+	for i := 0; i < len(s.keyManager.GetAllKeys()); i++ {
+		req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
+		req.Header.Set("xi-api-key", s.keyManager.GetCurrentKey())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "audio/mpeg")
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get TTS from ElevenLabs: %w", err)
-	}
-	defer resp.Body.Close()
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			log.Printf("ElevenLabs request failed (attempt %d): %v", i+1, err)
+			time.Sleep(1 * time.Second) // Wait before retrying
+			continue
+		}
+		
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusUnauthorized {
+			log.Printf("Quota/Auth error detected with ElevenLabs key %d (Status: %s). Rotating key.", i+1, resp.Status)
+			resp.Body.Close()
+			s.keyManager.RotateKey()
+			continue
+		}
+		
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("ElevenLabs returned non-200 status: %s - %s", resp.Status, string(body))
+		}
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("ElevenLabs returned non-200 status for TTS: %s - %s", resp.Status, string(body))
+		audioBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read audio response body: %w", err)
+		}
+		return audioBytes, nil
 	}
-
-	audioBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read audio response body: %w", err)
-	}
-
-	return audioBytes, nil
+	
+	return nil, fmt.Errorf("all ElevenLabs API keys failed or were exhausted")
 }

@@ -53,12 +53,82 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery, userData *mo
 func (b *Bot) handleCommand(message *tgbotapi.Message, userData *models.UserData) {
 	switch message.Command() {
 	case "start":
-		userData = models.NewDefaultUserData()
+		// Reset user data by overwriting the struct pointed to by the userData parameter.
+		*userData = *models.NewDefaultUserData()
 		b.db.SetUserData(message.From.ID, userData)
 		b.handleStartCommand(message.Chat.ID)
+	case "voice":
+		b.handleVoiceCommand(message)
 	default:
 		log.Printf("Received an unknown command: %s", message.Command())
 	}
+}
+
+func (b *Bot) handleVoiceCommand(message *tgbotapi.Message) {
+	chatID := message.Chat.ID
+	args := message.CommandArguments()
+
+	parts := strings.SplitN(args, " ", 2)
+	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		usageText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "voice_command_usage"})
+		msg := tgbotapi.NewMessage(chatID, usageText)
+		b.api.Send(msg)
+		return
+	}
+
+	voiceName := strings.ToLower(parts[0])
+	textToConvert := parts[1]
+
+	voices := b.elevenlabsService.GetVoices()
+	var voiceID string
+	var found bool
+	for _, voice := range voices {
+		name := voice.Name
+		if name == "" {
+			name = voice.VoiceID
+		}
+		if strings.ToLower(name) == voiceName {
+			voiceID = voice.VoiceID
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		notFoundText, _ := b.localizer.Localize(&i18n.LocalizeConfig{
+			MessageID: "voice_not_found",
+			TemplateData: map[string]string{
+				"VoiceName": parts[0],
+			},
+		})
+		msg := tgbotapi.NewMessage(chatID, notFoundText)
+		b.api.Send(msg)
+		return
+	}
+
+	generatingText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "generating_audio_simple"})
+	msg := tgbotapi.NewMessage(chatID, generatingText)
+	b.api.Send(msg)
+
+	go func() {
+		audioBytes, err := b.elevenlabsService.TextToSpeech(voiceID, textToConvert)
+		if err != nil {
+			log.Printf("Failed to generate direct audio for user %d: %v", message.From.ID, err)
+			b.sendErrorMessage(chatID, "audio_generation_error")
+			return
+		}
+
+		audioFile := tgbotapi.FileBytes{
+			Name:  fmt.Sprintf("voice_%d.mp3", message.From.ID),
+			Bytes: audioBytes,
+		}
+
+		audioMsg := tgbotapi.NewAudio(chatID, audioFile)
+		audioMsg.Caption = fmt.Sprintf("Teks: \"%s\"", textToConvert)
+		if _, err := b.api.Send(audioMsg); err != nil {
+			log.Printf("Failed to send direct audio file for user %d: %v", message.From.ID, err)
+		}
+	}()
 }
 
 func (b *Bot) handleStartCommand(chatID int64) {
@@ -400,7 +470,6 @@ func (b *Bot) getVoiceSelectionKeyboard(voices []models.Voice, page int) tgbotap
 
 	for i := start; i < end; i += 2 {
 		var row []tgbotapi.InlineKeyboardButton
-		// Use voice name for button text, if empty, use voice ID
 		buttonText := voices[i].Name
 		if buttonText == "" {
 			buttonText = voices[i].VoiceID

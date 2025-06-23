@@ -1,9 +1,9 @@
 package main
 
 import (
-	"context"
 	"log"
 	"video-script-bot/internal/ai"
+	"video-script-bot/internal/apikeys"
 	"video-script-bot/internal/bot"
 	"video-script-bot/internal/config"
 	"video-script-bot/internal/i18n"
@@ -11,7 +11,6 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
 	cfg := config.LoadConfig()
 
 	localizer := i18n.NewLocalizer(cfg.DefaultLang)
@@ -21,12 +20,19 @@ func main() {
 		log.Fatalf("FATAL: Could not initialize database: %v", err)
 	}
 
-	geminiService, err := ai.NewGeminiService(ctx, cfg.GeminiAPIKey)
+	geminiKeyManager, err := apikeys.NewManager(cfg.GeminiAPIKeys)
 	if err != nil {
-		log.Fatalf("FATAL: Could not initialize Gemini service: %v", err)
+		log.Printf("WARNING: Could not initialize Gemini Key Manager: %v. Gemini features will be disabled.", err)
 	}
 
-	elevenlabsService, err := ai.NewElevenLabsService(cfg.ElevenLabsAPIKey, cfg.ElevenLabsModelID)
+	elevenlabsKeyManager, err := apikeys.NewManager(cfg.ElevenLabsAPIKeys)
+	if err != nil {
+		log.Printf("WARNING: Could not initialize ElevenLabs Key Manager: %v. TTS features will be disabled.", err)
+	}
+
+	geminiService := ai.NewGeminiService(geminiKeyManager)
+	
+	elevenlabsService, err := ai.NewElevenLabsService(elevenlabsKeyManager, cfg.ElevenLabsModelID)
 	if err != nil {
 		log.Fatalf("FATAL: Could not initialize ElevenLabs service: %v", err)
 	}
@@ -36,7 +42,7 @@ func main() {
 		log.Fatalf("FATAL: Could not initialize bot: %v", err)
 	}
 
-	log.Println("Bot initialized successfully with SQLite database. Starting to listen for updates...")
+	log.Println("Bot initialized successfully with API Key Rotation. Starting to listen for updates...")
 
 	telegramBot.Start()
 }

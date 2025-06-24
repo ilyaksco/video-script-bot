@@ -31,14 +31,33 @@ func New(cfg *config.Config, localizer *i18n.Localizer, db *storage.Storage, gem
 	api.Debug = false
 	log.Printf("Authorized on account %s", api.Self.UserName)
 
-	return &Bot{
+	bot := &Bot{
 		api:               api,
 		cfg:               cfg,
 		localizer:         localizer,
 		db:                db,
 		geminiService:     geminiService,
 		elevenlabsService: elevenlabsService,
-	}, nil
+	}
+
+	if err := bot.setCommands(); err != nil {
+		log.Printf("Warning: Failed to set bot commands: %v", err)
+	}
+
+	return bot, nil
+}
+
+func (b *Bot) setCommands() error {
+	commands := []tgbotapi.BotCommand{
+		{Command: "start", Description: "Mulai atau restart bot"},
+		{Command: "voice", Description: "Ubah teks menjadi audio"},
+		{Command: "listvoices", Description: "Tampilkan daftar suara"},
+		{Command: "help", Description: "Tampilkan pesan bantuan"},
+		{Command: "cancel", Description: "Batalkan proses saat ini"},
+	}
+	config := tgbotapi.NewSetMyCommands(commands...)
+	_, err := b.api.Request(config)
+	return err
 }
 
 func (b *Bot) Start() {

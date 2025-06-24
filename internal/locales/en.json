@@ -1,7 +1,9 @@
 {
-  "start_message": "Welcome! I can help you create a video script and turn it into audio narration. Press the button below to begin.",
-  "create_script_button": "Create Script",
-  "upload_video_prompt": "Great! Please upload your video now.",
+  "start_message": "Welcome! I can help you create a video script or convert text to audio directly. Please choose an option below.",
+  "create_script_button": "🎬 Create Video Script",
+  "button_text_to_voice": "🔊 Text to Voice (Tutorial)",
+  "voice_tutorial_message": "<b>How to Use the Text to Voice Feature</b>\n\nThe feature allows you to convert text to audio directly without the video workflow.\n\n<b>Command Format:</b>\n<code>/voice [voice_name] [your text]</code>\n\n<b>Example Usage:</b>\n<code>/voice Rachel Hello, this is an audio test.</code>\n\n<i>To see the list of available voice names, use the /listvoices command.</i>",
+  "upload_video_prompt": "Great! Please upload your video now. You can cancel this process at any time.",
   "video_received_confirmation": "Video received! Now processing...",
   "please_upload_video": "Please upload a video file, not text or an image.",
   "processing_video": "Your video is being analyzed by the AI. Please wait, this might take a moment...",
@@ -25,7 +27,13 @@
   "button_next_page": "Next ➡️",
   "button_prev_page": "⬅️ Previous",
   "database_error": "Sorry, a system error occurred. Please try again later.",
-  "voice_command_usage": "Incorrect usage. Please use the format:\n`/voice <voice_name> <text_to_convert>`\n\nExample:\n`/voice Rachel Hello everyone, this is a test.`",
-  "voice_not_found": "Voice '{{.VoiceName}}' not found. Please use one of the available voice names from `voices.json`.",
-  "generating_audio_simple": "Generating your audio..."
+  "voice_command_usage": "Incorrect usage. Please use the format:\n<code>/voice <voice_name> <text_to_convert></code>\n\nExample:\n<code>/voice Rachel Hello everyone, this is a test.</code>",
+  "voice_not_found": "Voice '{{.VoiceName}}' not found. Use /listvoices to see the available list.",
+  "generating_audio_simple": "Generating your audio...",
+  "caption_too_long_error": "Failed to send audio: The text you provided is too long to be used as a caption. Please shorten your text.",
+  "cancel_message": "The process has been cancelled. You are now back to the main menu.",
+  "button_cancel": "❌ Cancel",
+  "help_message": "<b>Bot Help Guide</b>\n\nHere is a list of available commands and features:\n\n<b>Main Commands</b>\n- /start - Starts or restarts the bot and shows the main menu.\n- /help - Displays this help message.\n- /cancel - Cancels any ongoing process and returns to the main menu.\n- /listvoices - Displays the list of available voices.\n\n<b>Text to Voice Feature</b>\n- /voice <code>[voice_name] [text]</code> - Converts text to audio directly. Press the \"Text to Voice\" button on the main menu for a full tutorial.\n\n<b>Video Script Workflow</b>\n1. Press \"Create Video Script\" on the main menu.\n2. Upload your video file.\n3. Choose the desired script style.\n4. Revise, regenerate, or approve the AI-generated script.\n5. If approved, select a voice for the narration.\n6. The bot will send you the audio files for each line of the script.",
+  "voice_list_header": "Here is the list of available voices from <code>voices.json</code>:",
+  "voice_command_copied": "Tap the text below to copy, then add your message:\n\n<code>/voice {{.VoiceName}} </code>"
 }

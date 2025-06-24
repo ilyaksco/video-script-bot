@@ -17,6 +17,30 @@ const voicesPerPage = 6
 
 func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery, userData *models.UserData) {
 	ack := tgbotapi.NewCallback(callback.ID, "")
+	
+	// Separate logic for listvoices callbacks
+	if strings.HasPrefix(callback.Data, "list_voice_") {
+		voiceName := strings.TrimPrefix(callback.Data, "list_voice_")
+		// Acknowledge the button press
+		if _, err := b.api.Request(ack); err != nil {
+			log.Printf("Failed to acknowledge callback query: %v", err)
+		}
+
+		// Send a new message with the command to copy
+		replyText, _ := b.localizer.Localize(&i18n.LocalizeConfig{
+			MessageID: "voice_command_copied",
+			TemplateData: map[string]string{
+				"VoiceName": voiceName,
+			},
+		})
+
+		msg := tgbotapi.NewMessage(callback.Message.Chat.ID, replyText)
+		msg.ParseMode = tgbotapi.ModeHTML
+		b.api.Send(msg)
+		
+		return
+	}
+
 	if _, err := b.api.Request(ack); err != nil {
 		log.Printf("Failed to acknowledge callback query: %v", err)
 	}
@@ -37,6 +61,10 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery, userData *mo
 	switch callback.Data {
 	case "create_script":
 		b.promptForVideoUpload(callback.Message.Chat.ID, userData)
+	case "show_voice_tutorial":
+		b.sendVoiceTutorial(callback.Message.Chat.ID)
+	case "cancel_process":
+		b.handleCancelCommand(callback.Message, userData)
 	case "custom_style":
 		b.promptForCustomStyle(callback.Message.Chat.ID, userData)
 	case "agree_script":
@@ -53,15 +81,45 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery, userData *mo
 func (b *Bot) handleCommand(message *tgbotapi.Message, userData *models.UserData) {
 	switch message.Command() {
 	case "start":
-		// Reset user data by overwriting the struct pointed to by the userData parameter.
-		*userData = *models.NewDefaultUserData()
-		b.db.SetUserData(message.From.ID, userData)
-		b.handleStartCommand(message.Chat.ID)
+		b.handleCancelCommand(message, userData)
 	case "voice":
 		b.handleVoiceCommand(message)
+	case "listvoices":
+		b.handleListVoicesCommand(message.Chat.ID)
+	case "help":
+		b.handleHelpCommand(message.Chat.ID)
+	case "cancel":
+		b.handleCancelCommand(message, userData)
 	default:
 		log.Printf("Received an unknown command: %s", message.Command())
 	}
+}
+
+func (b *Bot) handleListVoicesCommand(chatID int64) {
+	header, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "voice_list_header"})
+	msg := tgbotapi.NewMessage(chatID, header)
+	msg.ParseMode = tgbotapi.ModeHTML
+	b.api.Send(msg)
+	
+	b.sendPaginatedVoices(chatID, 0, false) // `false` indicates we don't need a cancel button here
+}
+
+func (b *Bot) handleHelpCommand(chatID int64) {
+	helpText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "help_message"})
+	msg := tgbotapi.NewMessage(chatID, helpText)
+	msg.ParseMode = tgbotapi.ModeHTML
+	b.api.Send(msg)
+}
+
+func (b *Bot) handleCancelCommand(message *tgbotapi.Message, userData *models.UserData) {
+	*userData = *models.NewDefaultUserData()
+	b.db.SetUserData(message.From.ID, userData)
+
+	cancelText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "cancel_message"})
+	msg := tgbotapi.NewMessage(message.Chat.ID, cancelText)
+	b.api.Send(msg)
+
+	b.handleStartCommand(message.Chat.ID)
 }
 
 func (b *Bot) handleVoiceCommand(message *tgbotapi.Message) {
@@ -72,6 +130,7 @@ func (b *Bot) handleVoiceCommand(message *tgbotapi.Message) {
 	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
 		usageText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "voice_command_usage"})
 		msg := tgbotapi.NewMessage(chatID, usageText)
+		msg.ParseMode = tgbotapi.ModeHTML
 		b.api.Send(msg)
 		return
 	}
@@ -102,6 +161,7 @@ func (b *Bot) handleVoiceCommand(message *tgbotapi.Message) {
 			},
 		})
 		msg := tgbotapi.NewMessage(chatID, notFoundText)
+		msg.ParseMode = tgbotapi.ModeHTML
 		b.api.Send(msg)
 		return
 	}
@@ -127,32 +187,39 @@ func (b *Bot) handleVoiceCommand(message *tgbotapi.Message) {
 		audioMsg.Caption = fmt.Sprintf("Teks: \"%s\"", textToConvert)
 		if _, err := b.api.Send(audioMsg); err != nil {
 			log.Printf("Failed to send direct audio file for user %d: %v", message.From.ID, err)
+			if strings.Contains(err.Error(), "caption is too long") {
+				b.sendErrorMessage(chatID, "caption_too_long_error")
+			} else {
+				b.sendErrorMessage(chatID, "audio_generation_error")
+			}
 		}
 	}()
 }
 
 func (b *Bot) handleStartCommand(chatID int64) {
 	startMessageText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "start_message"})
-	createScriptButtonText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "create_script_button"})
-
 	msg := tgbotapi.NewMessage(chatID, startMessageText)
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(createScriptButtonText, "create_script"),
-		),
-	)
-	msg.ReplyMarkup = keyboard
+	msg.ReplyMarkup = b.getStartKeyboard()
 
 	if _, err := b.api.Send(msg); err != nil {
 		log.Printf("Error sending start message: %v", err)
 	}
 }
 
+func (b *Bot) sendVoiceTutorial(chatID int64) {
+	tutorialText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "voice_tutorial_message"})
+	msg := tgbotapi.NewMessage(chatID, tutorialText)
+	msg.ParseMode = tgbotapi.ModeHTML
+	b.api.Send(msg)
+}
+
 func (b *Bot) promptForVideoUpload(chatID int64, userData *models.UserData) {
 	uploadPromptText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "upload_video_prompt"})
 	msg := tgbotapi.NewMessage(chatID, uploadPromptText)
+
+	msg.ReplyMarkup = b.getCancelKeyboard()
 	b.api.Send(msg)
-	
+
 	userData.State = models.StateWaitingForVideo
 	b.db.SetUserData(chatID, userData)
 }
@@ -197,6 +264,7 @@ func (b *Bot) handleStyleSelection(callback *tgbotapi.CallbackQuery, userData *m
 func (b *Bot) promptForCustomStyle(chatID int64, userData *models.UserData) {
 	promptText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "custom_style_prompt"})
 	msg := tgbotapi.NewMessage(chatID, promptText)
+	msg.ReplyMarkup = b.getCancelKeyboard()
 	b.api.Send(msg)
 
 	userData.State = models.StateWaitingForCustomStyle
@@ -251,13 +319,12 @@ func (b *Bot) handleAgreeScript(callback *tgbotapi.CallbackQuery, userData *mode
 	userID := callback.From.ID
 
 	text, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "agreed_to_script"})
-	msg := tgbotapi.NewMessage(chatID, text)
-	b.api.Send(msg)
+	b.api.Send(tgbotapi.NewMessage(chatID, text))
 
 	userData.State = models.StateWaitingForVoiceSelection
 	b.db.SetUserData(userID, userData)
-	
-	b.sendPaginatedVoices(chatID, 0)
+
+	b.sendPaginatedVoices(chatID, 0, true)
 
 	editMsg := tgbotapi.NewEditMessageReplyMarkup(chatID, callback.Message.MessageID, tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}})
 	b.api.Send(editMsg)
@@ -273,6 +340,7 @@ func (b *Bot) handleRegenerateScript(chatID int64, userData *models.UserData) {
 func (b *Bot) handleReviseScript(chatID int64, userData *models.UserData) {
 	text, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "revise_prompt"})
 	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = b.getCancelKeyboard()
 	b.api.Send(msg)
 
 	userData.State = models.StateWaitingForRevision
@@ -290,7 +358,7 @@ func (b *Bot) handleRevisionInput(message *tgbotapi.Message, userData *models.Us
 
 	userData.State = models.StateIdle
 	b.db.SetUserData(userID, userData)
-	
+
 	go b.reviseScript(context.Background(), chatID, userID, instructions, userData)
 }
 
@@ -323,7 +391,7 @@ func (b *Bot) sendScriptMessage(chatID int64, script string) {
 	b.api.Send(msg)
 }
 
-func (b *Bot) sendPaginatedVoices(chatID int64, page int) {
+func (b *Bot) sendPaginatedVoices(chatID int64, page int, forSelection bool) {
 	voices := b.elevenlabsService.GetVoices()
 	if len(voices) == 0 {
 		log.Println("Error: no voices loaded from file")
@@ -331,8 +399,14 @@ func (b *Bot) sendPaginatedVoices(chatID int64, page int) {
 		return
 	}
 
-	keyboard := b.getVoiceSelectionKeyboard(voices, page)
-	msg := tgbotapi.NewMessage(chatID, "Please select a voice:")
+	keyboard := b.getVoiceSelectionKeyboard(voices, page, forSelection)
+	msgText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "voice_list_header"})
+	if forSelection {
+		msgText = "Please select a voice:"
+	}
+
+	msg := tgbotapi.NewMessage(chatID, msgText)
+	msg.ParseMode = tgbotapi.ModeHTML
 	msg.ReplyMarkup = keyboard
 	b.api.Send(msg)
 }
@@ -350,7 +424,22 @@ func (b *Bot) handleVoicePage(callback *tgbotapi.CallbackQuery) {
 		return
 	}
 
-	keyboard := b.getVoiceSelectionKeyboard(voices, page)
+	hasCancel := false
+	if callback.Message.ReplyMarkup != nil {
+		for _, row := range callback.Message.ReplyMarkup.InlineKeyboard {
+			for _, button := range row {
+				if button.CallbackData != nil && *button.CallbackData == "cancel_process" {
+					hasCancel = true
+					break
+				}
+			}
+			if hasCancel {
+				break
+			}
+		}
+	}
+
+	keyboard := b.getVoiceSelectionKeyboard(voices, page, hasCancel)
 	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, callback.Message.Text)
 	editMsg.ReplyMarkup = &keyboard
 	b.api.Send(editMsg)
@@ -375,7 +464,7 @@ func (b *Bot) handleVoiceSelection(callback *tgbotapi.CallbackQuery, userData *m
 
 	userData.State = models.StateIdle
 	b.db.SetUserData(userID, userData)
-	
+
 	go b.generateAndSendAudio(chatID, userID, voiceID, userData)
 }
 
@@ -429,12 +518,35 @@ func (b *Bot) generateAndSendAudio(chatID, userID int64, voiceID string, userDat
 	b.api.Send(finalMsg)
 }
 
+func (b *Bot) getStartKeyboard() tgbotapi.InlineKeyboardMarkup {
+	createScriptButtonText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "create_script_button"})
+	textToVoiceButtonText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "button_text_to_voice"})
+
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(createScriptButtonText, "create_script"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(textToVoiceButtonText, "show_voice_tutorial"),
+		),
+	)
+}
+
+func (b *Bot) getCancelKeyboard() tgbotapi.InlineKeyboardMarkup {
+	cancelButtonText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "button_cancel"})
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(cancelButtonText, "cancel_process"),
+		),
+	)
+}
+
 func (b *Bot) getStyleSelectionKeyboard() tgbotapi.InlineKeyboardMarkup {
 	profText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "style_professional"})
 	narrText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "style_narrative"})
 	custText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "style_custom"})
 
-	return tgbotapi.NewInlineKeyboardMarkup(
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(profText, "style_professional"),
 			tgbotapi.NewInlineKeyboardButtonData(narrText, "style_narrative"),
@@ -443,6 +555,8 @@ func (b *Bot) getStyleSelectionKeyboard() tgbotapi.InlineKeyboardMarkup {
 			tgbotapi.NewInlineKeyboardButtonData(custText, "custom_style"),
 		),
 	)
+	keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, b.getCancelKeyboard().InlineKeyboard...)
+	return keyboard
 }
 
 func (b *Bot) getScriptActionKeyboard() tgbotapi.InlineKeyboardMarkup {
@@ -459,7 +573,7 @@ func (b *Bot) getScriptActionKeyboard() tgbotapi.InlineKeyboardMarkup {
 	)
 }
 
-func (b *Bot) getVoiceSelectionKeyboard(voices []models.Voice, page int) tgbotapi.InlineKeyboardMarkup {
+func (b *Bot) getVoiceSelectionKeyboard(voices []models.Voice, page int, forSelection bool) tgbotapi.InlineKeyboardMarkup {
 	var rows [][]tgbotapi.InlineKeyboardButton
 
 	start := page * voicesPerPage
@@ -474,14 +588,28 @@ func (b *Bot) getVoiceSelectionKeyboard(voices []models.Voice, page int) tgbotap
 		if buttonText == "" {
 			buttonText = voices[i].VoiceID
 		}
-		row = append(row, tgbotapi.NewInlineKeyboardButtonData(buttonText, "voice_"+voices[i].VoiceID))
+		
+		var callbackData string
+		if forSelection {
+			callbackData = "voice_" + voices[i].VoiceID
+		} else {
+			callbackData = "list_voice_" + buttonText
+		}
+		row = append(row, tgbotapi.NewInlineKeyboardButtonData(buttonText, callbackData))
 
 		if i+1 < end {
 			buttonText2 := voices[i+1].Name
 			if buttonText2 == "" {
 				buttonText2 = voices[i+1].VoiceID
 			}
-			row = append(row, tgbotapi.NewInlineKeyboardButtonData(buttonText2, "voice_"+voices[i+1].VoiceID))
+
+			var callbackData2 string
+			if forSelection {
+				callbackData2 = "voice_" + voices[i+1].VoiceID
+			} else {
+				callbackData2 = "list_voice_" + buttonText2
+			}
+			row = append(row, tgbotapi.NewInlineKeyboardButtonData(buttonText2, callbackData2))
 		}
 		rows = append(rows, row)
 	}
@@ -498,6 +626,10 @@ func (b *Bot) getVoiceSelectionKeyboard(voices []models.Voice, page int) tgbotap
 
 	if len(navRow) > 0 {
 		rows = append(rows, navRow)
+	}
+
+	if forSelection { // Only add cancel button if it's for the main selection process
+		rows = append(rows, b.getCancelKeyboard().InlineKeyboard...)
 	}
 
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)

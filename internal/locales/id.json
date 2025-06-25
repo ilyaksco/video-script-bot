@@ -1,8 +1,9 @@
 {
-  "start_message": "Selamat datang! Saya dapat membantu Anda membuat skrip video atau mengubah teks menjadi audio secara langsung. Silakan pilih salah satu opsi di bawah.",
+  "start_message": "Selamat datang! Saya dapat membantu Anda membuat skrip video atau mengubah teks menjadi audio. Silakan pilih salah satu opsi di bawah.",
   "create_script_button": "🎬 Buat Skrip Video",
   "button_text_to_voice": "🔊 Text ke Suara (Tutorial)",
-  "voice_tutorial_message": "<b>Cara Menggunakan Fitur Text to Voice</b>\n\nFitur ini memungkinkan Anda mengubah teks menjadi audio secara langsung tanpa melalui alur video.\n\n<b>Format Perintah:</b>\n<code>/voice [nama_suara] [teks Anda]</code>\n\n<b>Contoh Penggunaan:</b>\n<code>/voice Rachel Halo, ini adalah audio percobaan.</code>\n\n<i>Untuk melihat daftar nama suara yang tersedia, gunakan perintah /listvoices.</i>",
+  "settings_button_main": "⚙️ Pengaturan",
+  "voice_tutorial_message": "<b>Cara Menggunakan Fitur Text to Voice</b>\n\nFitur ini memungkinkan Anda mengubah teks menjadi audio secara langsung tanpa melalui alur video.\n\n<b>Format Perintah:</b>\n<code>/voice [nama_suara] [teks Anda]</code>\n\n<b>Contoh Penggunaan:</b>\n<code>/voice Rachel Halo, ini adalah audio percobaan.</code>\n\n<i>Untuk melihat daftar nama suara yang tersedia, gunakan perintah /listvoices. Anda juga bisa mengubah pengaturan audio lewat perintah /settings.</i>",
   "upload_video_prompt": "Baik! Silakan unggah video Anda sekarang. Anda bisa membatalkan proses ini kapan saja.",
   "video_received_confirmation": "Video telah diterima! Sedang diproses...",
   "please_upload_video": "Mohon unggah file video, bukan teks atau gambar.",
@@ -33,7 +34,15 @@
   "caption_too_long_error": "Gagal mengirim audio: Teks yang Anda berikan terlalu panjang untuk dijadikan caption. Mohon perpendek teks Anda.",
   "cancel_message": "Proses telah dibatalkan. Anda telah kembali ke menu utama.",
   "button_cancel": "❌ Batal",
-  "help_message": "<b>Panduan Bantuan Bot</b>\n\nBerikut adalah daftar perintah dan fitur yang tersedia:\n\n<b>Perintah Utama</b>\n- /start - Memulai atau memulai ulang bot dan menampilkan menu utama.\n- /help - Menampilkan pesan bantuan ini.\n- /cancel - Membatalkan proses apa pun yang sedang berjalan dan kembali ke menu utama.\n- /listvoices - Menampilkan daftar suara yang tersedia.\n\n<b>Fitur Text to Voice</b>\n- /voice <code>[nama_suara] [teks]</code> - Mengubah teks menjadi audio secara langsung. Tekan tombol \"Text ke Suara\" di menu utama untuk tutorial lengkap.\n\n<b>Alur Kerja Skrip Video</b>\n1. Tekan \"Buat Skrip Video\" di menu utama.\n2. Unggah file video Anda.\n3. Pilih gaya skrip yang diinginkan.\n4. Revisi, buat ulang, atau setujui skrip yang dihasilkan AI.\n5. Jika setuju, pilih suara untuk narasi.\n6. Bot akan mengirimkan file-file audio untuk setiap baris skrip.",
+  "help_message": "<b>Panduan Bantuan Bot</b>\n\nBerikut adalah daftar perintah dan fitur yang tersedia:\n\n<b>Perintah Utama</b>\n- /start - Memulai atau memulai ulang bot dan menampilkan menu utama.\n- /help - Menampilkan pesan bantuan ini.\n- /settings - Mengubah pengaturan pembuatan audio (stabilitas, kejelasan).\n- /cancel - Membatalkan proses apa pun yang sedang berjalan dan kembali ke menu utama.\n- /listvoices - Menampilkan daftar suara yang tersedia.\n\n<b>Fitur Text to Voice</b>\n- /voice <code>[nama_suara] [teks]</code> - Mengubah teks menjadi audio secara langsung. Tekan tombol \"Text ke Suara\" di menu utama untuk tutorial lengkap.\n\n<b>Alur Kerja Skrip Video</b>\n1. Tekan \"Buat Skrip Video\" di menu utama.\n2. Unggah file video Anda.\n3. Pilih gaya skrip yang diinginkan.\n4. Revisi, buat ulang, atau setujui skrip yang dihasilkan AI.\n5. Jika setuju, pilih suara untuk narasi.\n6. Bot akan mengirimkan file-file audio untuk setiap baris skrip.",
   "voice_list_header": "Berikut adalah daftar suara yang tersedia:",
-  "voice_command_copied": "Klik teks di bawah untuk menyalin, lalu tambahkan pesan Anda:\n\n<code>/voice {{.VoiceName}} </code>"
+  "voice_command_copied": "Klik teks di bawah untuk menyalin, lalu tambahkan pesan Anda:\n\n<code>/voice {{.VoiceName}} </code>",
+  "settings_menu_header": "<b>Pengaturan Audio</b>\n\nDi sini Anda dapat menyesuaikan parameter untuk pembuatan suara. Nilai saat ini:\n\n- Stabilitas: <code>%.2f</code>\n- Kejelasan: <code>%.2f</code>\n\nPilih pengaturan yang ingin Anda ubah.",
+  "settings_button_stability": "Ubah Stabilitas",
+  "settings_button_clarity": "Ubah Kejelasan",
+  "settings_button_back": "⬅️ Kembali",
+  "prompt_stability": "Masukkan nilai <b>Stabilitas</b> baru (angka antara 0.0 dan 1.0).\n\nStabilitas yang lebih tinggi membuat suara lebih konsisten tetapi bisa terdengar monoton. Nilai yang lebih rendah membuatnya lebih ekspresif tetapi bisa tidak stabil. Nilai default adalah 0.75.",
+  "prompt_clarity": "Masukkan nilai <b>Kejelasan</b> baru (angka antara 0.0 dan 1.0).\n\nKejelasan yang lebih tinggi membuat suara lebih mirip dengan suara asli, tetapi dapat menyebabkan artefak. Nilai yang lebih rendah membuatnya lebih stabil tetapi kurang mirip. Nilai default adalah 0.75.",
+  "settings_updated": "Pengaturan berhasil diperbarui!",
+  "settings_invalid_value": "Nilai tidak valid. Harap masukkan angka antara 0.0 dan 1.0."
 }

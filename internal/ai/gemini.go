@@ -28,8 +28,12 @@ func (s *GeminiService) GenerateScriptFromVideo(ctx context.Context, videoData [
 	)
 	videoPart := genai.Blob{MIMEType: mimeType, Data: videoData}
 
-	// Retry logic with key rotation
 	for i := 0; i < len(s.keyManager.GetAllKeys()); i++ {
+		if ctx.Err() != nil {
+			log.Printf("Context cancelled before attempting API call with key %d.", i+1)
+			return "", ctx.Err()
+		}
+
 		apiKey := s.keyManager.GetCurrentKey()
 		client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 		if err != nil {
@@ -42,10 +46,14 @@ func (s *GeminiService) GenerateScriptFromVideo(ctx context.Context, videoData [
 		res, err := model.GenerateContent(ctx, videoPart, genai.Text(prompt))
 
 		if err != nil {
+			if ctx.Err() == context.Canceled {
+				log.Println("Gemini script generation cancelled by user.")
+				return "", err
+			}
 			if isQuotaError(err) {
 				log.Printf("Quota error detected with Gemini key %d. Rotating key.", i+1)
 				s.keyManager.RotateKey()
-				continue // Try again with the next key
+				continue
 			}
 			return "", fmt.Errorf("gemini content generation failed with a non-quota error: %w", err)
 		}
@@ -57,33 +65,50 @@ func (s *GeminiService) GenerateScriptFromVideo(ctx context.Context, videoData [
 }
 
 func (s *GeminiService) ReviseScript(ctx context.Context, originalScript, instructions string) (string, error) {
-	// This function can also be updated with the same retry logic if needed
 	prompt := fmt.Sprintf(
 		"You are a script editor. Below is an original video script. Revise it based on the user's instructions. Maintain the exact 'HH:MM:SS-HH:MM:SS: description' format for every line. Keep the descriptions concise and relevant to the original script's context.\n\nOriginal Script:\n%s\n\nUser Instructions:\n%s",
 		originalScript,
 		instructions,
 	)
 
-	// Simplified: using only the current key for now. Can be expanded with retry logic.
-	apiKey := s.keyManager.GetCurrentKey()
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
-	if err != nil {
-		return "", fmt.Errorf("failed to create genai client for revision: %w", err)
-	}
-	
-	model := client.GenerativeModel("gemini-1.5-flash")
-	res, err := model.GenerateContent(ctx, genai.Text(prompt))
-	if err != nil {
-		return "", fmt.Errorf("gemini revision failed: %w", err)
+	for i := 0; i < len(s.keyManager.GetAllKeys()); i++ {
+		if ctx.Err() != nil {
+			log.Printf("Context cancelled before attempting API call with key %d.", i+1)
+			return "", ctx.Err()
+		}
+		
+		apiKey := s.keyManager.GetCurrentKey()
+		client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+		if err != nil {
+			log.Printf("Failed to create genai client with key %d for revision: %v. Rotating key.", i+1, err)
+			s.keyManager.RotateKey()
+			continue
+		}
+
+		model := client.GenerativeModel("gemini-1.5-flash")
+		res, err := model.GenerateContent(ctx, genai.Text(prompt))
+
+		if err != nil {
+			if ctx.Err() == context.Canceled {
+				log.Println("Gemini script revision cancelled by user.")
+				return "", err
+			}
+			if isQuotaError(err) {
+				log.Printf("Quota error detected with Gemini key %d during revision. Rotating key.", i+1)
+				s.keyManager.RotateKey()
+				continue
+			}
+			return "", fmt.Errorf("gemini revision failed with a non-quota error: %w", err)
+		}
+
+		return extractText(res)
 	}
 
-	return extractText(res)
+	return "", fmt.Errorf("all Gemini API keys failed or were exhausted during revision")
 }
-
 
 func isQuotaError(err error) bool {
 	errorString := strings.ToLower(err.Error())
-	// Common substrings for quota errors
 	return strings.Contains(errorString, "429") || strings.Contains(errorString, "quota") || strings.Contains(errorString, "limit exceeded")
 }
 

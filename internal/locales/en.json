@@ -2,7 +2,8 @@
   "start_message": "Welcome! I can help you create a video script or convert text to audio directly. Please choose an option below.",
   "create_script_button": "🎬 Create Video Script",
   "button_text_to_voice": "🔊 Text to Voice (Tutorial)",
-  "voice_tutorial_message": "<b>How to Use the Text to Voice Feature</b>\n\nThe feature allows you to convert text to audio directly without the video workflow.\n\n<b>Command Format:</b>\n<code>/voice [voice_name] [your text]</code>\n\n<b>Example Usage:</b>\n<code>/voice Rachel Hello, this is an audio test.</code>\n\n<i>To see the list of available voice names, use the /listvoices command.</i>",
+  "settings_button_main": "⚙️ Settings",
+  "voice_tutorial_message": "<b>How to Use the Text to Voice Feature</b>\n\nThe feature allows you to convert text to audio directly without the video workflow.\n\n<b>Command Format:</b>\n<code>/voice [voice_name] [your text]</code>\n\n<b>Example Usage:</b>\n<code>/voice Rachel Hello, this is an audio test.</code>\n\n<i>To see the list of available voice names, use the /listvoices command. You can also change audio settings with the /settings command.</i>",
   "upload_video_prompt": "Great! Please upload your video now. You can cancel this process at any time.",
   "video_received_confirmation": "Video received! Now processing...",
   "please_upload_video": "Please upload a video file, not text or an image.",
@@ -33,7 +34,15 @@
   "caption_too_long_error": "Failed to send audio: The text you provided is too long to be used as a caption. Please shorten your text.",
   "cancel_message": "The process has been cancelled. You are now back to the main menu.",
   "button_cancel": "❌ Cancel",
-  "help_message": "<b>Bot Help Guide</b>\n\nHere is a list of available commands and features:\n\n<b>Main Commands</b>\n- /start - Starts or restarts the bot and shows the main menu.\n- /help - Displays this help message.\n- /cancel - Cancels any ongoing process and returns to the main menu.\n- /listvoices - Displays the list of available voices.\n\n<b>Text to Voice Feature</b>\n- /voice <code>[voice_name] [text]</code> - Converts text to audio directly. Press the \"Text to Voice\" button on the main menu for a full tutorial.\n\n<b>Video Script Workflow</b>\n1. Press \"Create Video Script\" on the main menu.\n2. Upload your video file.\n3. Choose the desired script style.\n4. Revise, regenerate, or approve the AI-generated script.\n5. If approved, select a voice for the narration.\n6. The bot will send you the audio files for each line of the script.",
-  "voice_list_header": "Here is the list of available voices from <code>voices.json</code>:",
-  "voice_command_copied": "Tap the text below to copy, then add your message:\n\n<code>/voice {{.VoiceName}} </code>"
+  "help_message": "<b>Bot Help Guide</b>\n\nHere is a list of available commands and features:\n\n<b>Main Commands</b>\n- /start - Starts or restarts the bot and shows the main menu.\n- /help - Displays this help message.\n- /settings - Change audio generation settings (stability, clarity).\n- /cancel - Cancels any ongoing process and returns to the main menu.\n- /listvoices - Displays the list of available voices.\n\n<b>Text to Voice Feature</b>\n- /voice <code>[voice_name] [text]</code> - Converts text to audio directly. Press the \"Text to Voice\" button on the main menu for a full tutorial.\n\n<b>Video Script Workflow</b>\n1. Press \"Create Video Script\" on the main menu.\n2. Upload your video file.\n3. Choose the desired script style.\n4. Revise, regenerate, or approve the AI-generated script.\n5. If approved, select a voice for the narration.\n6. The bot will send you the audio files for each line of the script.",
+  "voice_list_header": "Here is the list of available voices from ivenvoices.json`:",
+  "voice_command_copied": "Tap the text below to copy, then add your message:\n\n<code>/voice {{.VoiceName}} </code>",
+  "settings_menu_header": "<b>Audio Settings</b>\n\nHere you can adjust the parameters for voice generation. Current values:\n\n- Stability: <code>%.2f</code>\n- Clarity: <code>%.2f</code>\n\nSelect a setting to change.",
+  "settings_button_stability": "Change Stability",
+  "settings_button_clarity": "Change Clarity",
+  "settings_button_back": "⬅️ Back",
+  "prompt_stability": "Enter a new <b>Stability</b> value (a number between 0.0 and 1.0).\n\nHigher stability makes the voice more consistent but can sound monotonous. Lower values make it more expressive but can be unstable. The default is 0.75.",
+  "prompt_clarity": "Enter a new <b>Clarity</b> value (a number between 0.0 and 1.0).\n\nHigher clarity makes the voice more similar to the original, but can introduce artifacts. Lower values make it more stable but less similar. The default is 0.75.",
+  "settings_updated": "Settings updated successfully!",
+  "settings_invalid_value": "Invalid value. Please enter a number between 0.0 and 1.0."
 }

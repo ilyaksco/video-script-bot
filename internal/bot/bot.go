@@ -1,9 +1,11 @@
 package bot
 
 import (
+	"context"
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"video-script-bot/internal/ai"
 	"video-script-bot/internal/config"
 	"video-script-bot/internal/models"
@@ -20,6 +22,7 @@ type Bot struct {
 	db                *storage.Storage
 	geminiService     *ai.GeminiService
 	elevenlabsService *ai.ElevenLabsService
+	activeTasks       sync.Map
 }
 
 func New(cfg *config.Config, localizer *i18n.Localizer, db *storage.Storage, geminiService *ai.GeminiService, elevenlabsService *ai.ElevenLabsService) (*Bot, error) {
@@ -38,6 +41,7 @@ func New(cfg *config.Config, localizer *i18n.Localizer, db *storage.Storage, gem
 		db:                db,
 		geminiService:     geminiService,
 		elevenlabsService: elevenlabsService,
+		activeTasks:       sync.Map{},
 	}
 
 	if err := bot.setCommands(); err != nil {
@@ -50,6 +54,7 @@ func New(cfg *config.Config, localizer *i18n.Localizer, db *storage.Storage, gem
 func (b *Bot) setCommands() error {
 	commands := []tgbotapi.BotCommand{
 		{Command: "start", Description: "Mulai atau restart bot"},
+		{Command: "settings", Description: "Ubah pengaturan audio"},
 		{Command: "voice", Description: "Ubah teks menjadi audio"},
 		{Command: "listvoices", Description: "Tampilkan daftar suara"},
 		{Command: "help", Description: "Tampilkan pesan bantuan"},
@@ -108,6 +113,10 @@ func (b *Bot) Start() {
 				b.handleCustomStyleInput(update.Message, userData)
 			case models.StateWaitingForRevision:
 				b.handleRevisionInput(update.Message, userData)
+			case models.StateWaitingForStability:
+				b.handleStabilityInput(update.Message, userData)
+			case models.StateWaitingForClarity:
+				b.handleClarityInput(update.Message, userData)
 			}
 		}
 	}
@@ -132,4 +141,26 @@ func (b *Bot) sendErrorMessage(chatID int64, messageID string) {
 	text, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: messageID})
 	msg := tgbotapi.NewMessage(chatID, text)
 	b.api.Send(msg)
+}
+
+func (b *Bot) registerBackgroundTask(userID int64) (context.Context, context.CancelFunc) {
+	b.cancelBackgroundTask(userID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	b.activeTasks.Store(userID, cancel)
+	return ctx, cancel
+}
+
+func (b *Bot) cancelBackgroundTask(userID int64) {
+	if cancelFunc, ok := b.activeTasks.Load(userID); ok {
+		if cf, isCancelFunc := cancelFunc.(context.CancelFunc); isCancelFunc {
+			cf()
+			log.Printf("Cancelled background task for user %d", userID)
+		}
+		b.activeTasks.Delete(userID)
+	}
+}
+
+func (b *Bot) clearBackgroundTask(userID int64) {
+	b.activeTasks.Delete(userID)
 }

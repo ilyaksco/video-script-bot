@@ -38,12 +38,18 @@ func NewElevenLabsService(keyManager *apikeys.KeyManager, modelID string) (*Elev
 
 func (s *ElevenLabsService) loadVoicesFromFile(filePath string) error {
 	file, err := os.Open(filePath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer file.Close()
 	bytes, err := io.ReadAll(file)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	var voicesFile models.VoicesFile
-	if err := json.Unmarshal(bytes, &voicesFile); err != nil { return err }
+	if err := json.Unmarshal(bytes, &voicesFile); err != nil {
+		return err
+	}
 	s.voices = voicesFile.Voices
 	return nil
 }
@@ -52,15 +58,18 @@ func (s *ElevenLabsService) GetVoices() []models.Voice {
 	return s.voices
 }
 
-func (s *ElevenLabsService) TextToSpeech(voiceID, text string) ([]byte, error) {
+func (s *ElevenLabsService) TextToSpeech(voiceID, text string, stability, clarity float32) ([]byte, error) {
 	url := fmt.Sprintf("%s/text-to-speech/%s", elevenLabsAPIURL, voiceID)
 	payload := map[string]interface{}{
 		"text":     text,
 		"model_id": s.modelID,
+		"voice_settings": map[string]float32{
+			"stability":        stability,
+			"similarity_boost": clarity,
+		},
 	}
 	jsonPayload, _ := json.Marshal(payload)
 
-	// Retry logic with key rotation
 	for i := 0; i < len(s.keyManager.GetAllKeys()); i++ {
 		req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
 		req.Header.Set("xi-api-key", s.keyManager.GetCurrentKey())
@@ -70,17 +79,17 @@ func (s *ElevenLabsService) TextToSpeech(voiceID, text string) ([]byte, error) {
 		resp, err := s.httpClient.Do(req)
 		if err != nil {
 			log.Printf("ElevenLabs request failed (attempt %d): %v", i+1, err)
-			time.Sleep(1 * time.Second) // Wait before retrying
+			time.Sleep(1 * time.Second)
 			continue
 		}
-		
+
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusUnauthorized {
 			log.Printf("Quota/Auth error detected with ElevenLabs key %d (Status: %s). Rotating key.", i+1, resp.Status)
 			resp.Body.Close()
 			s.keyManager.RotateKey()
 			continue
 		}
-		
+
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
@@ -94,6 +103,6 @@ func (s *ElevenLabsService) TextToSpeech(voiceID, text string) ([]byte, error) {
 		}
 		return audioBytes, nil
 	}
-	
+
 	return nil, fmt.Errorf("all ElevenLabs API keys failed or were exhausted")
 }

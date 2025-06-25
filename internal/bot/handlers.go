@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -17,16 +18,13 @@ const voicesPerPage = 6
 
 func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery, userData *models.UserData) {
 	ack := tgbotapi.NewCallback(callback.ID, "")
-	
-	// Separate logic for listvoices callbacks
+
 	if strings.HasPrefix(callback.Data, "list_voice_") {
 		voiceName := strings.TrimPrefix(callback.Data, "list_voice_")
-		// Acknowledge the button press
 		if _, err := b.api.Request(ack); err != nil {
 			log.Printf("Failed to acknowledge callback query: %v", err)
 		}
 
-		// Send a new message with the command to copy
 		replyText, _ := b.localizer.Localize(&i18n.LocalizeConfig{
 			MessageID: "voice_command_copied",
 			TemplateData: map[string]string{
@@ -37,13 +35,16 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery, userData *mo
 		msg := tgbotapi.NewMessage(callback.Message.Chat.ID, replyText)
 		msg.ParseMode = tgbotapi.ModeHTML
 		b.api.Send(msg)
-		
+
 		return
 	}
 
 	if _, err := b.api.Request(ack); err != nil {
 		log.Printf("Failed to acknowledge callback query: %v", err)
 	}
+
+	chatID := callback.Message.Chat.ID
+	userID := callback.From.ID
 
 	if strings.HasPrefix(callback.Data, "style_") {
 		b.handleStyleSelection(callback, userData)
@@ -60,19 +61,39 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery, userData *mo
 
 	switch callback.Data {
 	case "create_script":
-		b.promptForVideoUpload(callback.Message.Chat.ID, userData)
+		b.promptForVideoUpload(chatID, userData)
 	case "show_voice_tutorial":
-		b.sendVoiceTutorial(callback.Message.Chat.ID)
+		b.sendVoiceTutorial(chatID)
 	case "cancel_process":
 		b.handleCancelCommand(callback.Message, userData)
 	case "custom_style":
-		b.promptForCustomStyle(callback.Message.Chat.ID, userData)
+		b.promptForCustomStyle(chatID, userData)
 	case "agree_script":
 		b.handleAgreeScript(callback, userData)
 	case "regenerate_script":
-		b.handleRegenerateScript(callback.Message.Chat.ID, userData)
+		b.handleRegenerateScript(chatID, userData)
 	case "revise_script":
-		b.handleReviseScript(callback.Message.Chat.ID, userData)
+		b.handleReviseScript(chatID, userData)
+	case "settings":
+		b.sendSettingsMenu(chatID, userData, 0)
+	case "set_stability":
+		promptText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "prompt_stability"})
+		msg := tgbotapi.NewMessage(chatID, promptText)
+		msg.ParseMode = tgbotapi.ModeHTML
+		b.api.Send(msg)
+		userData.State = models.StateWaitingForStability
+		b.db.SetUserData(userID, userData)
+	case "set_clarity":
+		promptText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "prompt_clarity"})
+		msg := tgbotapi.NewMessage(chatID, promptText)
+		msg.ParseMode = tgbotapi.ModeHTML
+		b.api.Send(msg)
+		userData.State = models.StateWaitingForClarity
+		b.db.SetUserData(userID, userData)
+	case "back_to_main_menu":
+		b.handleStartCommand(chatID)
+		editMsg := tgbotapi.NewEditMessageReplyMarkup(chatID, callback.Message.MessageID, tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}})
+		b.api.Send(editMsg)
 	default:
 		log.Printf("Received unknown callback data: %s", callback.Data)
 	}
@@ -82,8 +103,10 @@ func (b *Bot) handleCommand(message *tgbotapi.Message, userData *models.UserData
 	switch message.Command() {
 	case "start":
 		b.handleStartCommand(message.Chat.ID)
+	case "settings":
+		b.sendSettingsMenu(message.Chat.ID, userData, 0)
 	case "voice":
-		b.handleVoiceCommand(message)
+		b.handleVoiceCommand(message, userData)
 	case "listvoices":
 		b.handleListVoicesCommand(message.Chat.ID)
 	case "help":
@@ -96,7 +119,7 @@ func (b *Bot) handleCommand(message *tgbotapi.Message, userData *models.UserData
 }
 
 func (b *Bot) handleListVoicesCommand(chatID int64) {
-	b.sendPaginatedVoices(chatID, 0, false) 
+	b.sendPaginatedVoices(chatID, 0, false)
 }
 
 func (b *Bot) handleHelpCommand(chatID int64) {
@@ -107,16 +130,23 @@ func (b *Bot) handleHelpCommand(chatID int64) {
 }
 
 func (b *Bot) handleCancelCommand(message *tgbotapi.Message, userData *models.UserData) {
+	userID := message.From.ID
+	chatID := message.Chat.ID
+
+	b.cancelBackgroundTask(userID)
+
 	*userData = *models.NewDefaultUserData()
-	b.db.SetUserData(message.From.ID, userData)
+	b.db.SetUserData(userID, userData)
 
 	cancelText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "cancel_message"})
-	msg := tgbotapi.NewMessage(message.Chat.ID, cancelText)
+	msg := tgbotapi.NewMessage(chatID, cancelText)
+	msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	b.api.Send(msg)
 
+	b.handleStartCommand(chatID)
 }
 
-func (b *Bot) handleVoiceCommand(message *tgbotapi.Message) {
+func (b *Bot) handleVoiceCommand(message *tgbotapi.Message, userData *models.UserData) {
 	chatID := message.Chat.ID
 	args := message.CommandArguments()
 
@@ -165,7 +195,7 @@ func (b *Bot) handleVoiceCommand(message *tgbotapi.Message) {
 	b.api.Send(msg)
 
 	go func() {
-		audioBytes, err := b.elevenlabsService.TextToSpeech(voiceID, textToConvert)
+		audioBytes, err := b.elevenlabsService.TextToSpeech(voiceID, textToConvert, userData.Stability, userData.Clarity)
 		if err != nil {
 			log.Printf("Failed to generate direct audio for user %d: %v", message.From.ID, err)
 			b.sendErrorMessage(chatID, "audio_generation_error")
@@ -252,7 +282,8 @@ func (b *Bot) handleStyleSelection(callback *tgbotapi.CallbackQuery, userData *m
 	userData.ScriptStyle = style
 	b.db.SetUserData(userID, userData)
 
-	go b.generateScript(context.Background(), chatID, userID, userData)
+	ctx, _ := b.registerBackgroundTask(userID)
+	go b.generateScript(ctx, chatID, userID, userData)
 }
 
 func (b *Bot) promptForCustomStyle(chatID int64, userData *models.UserData) {
@@ -278,10 +309,13 @@ func (b *Bot) handleCustomStyleInput(message *tgbotapi.Message, userData *models
 	userData.ScriptStyle = style
 	b.db.SetUserData(userID, userData)
 
-	go b.generateScript(context.Background(), chatID, userID, userData)
+	ctx, _ := b.registerBackgroundTask(userID)
+	go b.generateScript(ctx, chatID, userID, userData)
 }
 
 func (b *Bot) generateScript(ctx context.Context, chatID int64, userID int64, userData *models.UserData) {
+	defer b.clearBackgroundTask(userID)
+
 	if userData.VideoFileID == "" || userData.ScriptStyle == "" {
 		log.Printf("Error for user %d: missing data for script generation", userID)
 		b.sendErrorMessage(chatID, "analysis_error")
@@ -297,8 +331,12 @@ func (b *Bot) generateScript(ctx context.Context, chatID int64, userID int64, us
 
 	script, err := b.geminiService.GenerateScriptFromVideo(ctx, videoBytes, userData.VideoMimeType, userData.ScriptStyle)
 	if err != nil {
-		log.Printf("Error generating script from Gemini for user %d: %v", userID, err)
-		b.sendErrorMessage(chatID, "analysis_error")
+		if errors.Is(err, context.Canceled) {
+			log.Printf("Script generation cancelled for user %d", userID)
+		} else {
+			log.Printf("Error generating script from Gemini for user %d: %v", userID, err)
+			b.sendErrorMessage(chatID, "analysis_error")
+		}
 		return
 	}
 
@@ -328,7 +366,9 @@ func (b *Bot) handleRegenerateScript(chatID int64, userData *models.UserData) {
 	generatingText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "generating_script"})
 	msg := tgbotapi.NewMessage(chatID, generatingText)
 	b.api.Send(msg)
-	go b.generateScript(context.Background(), chatID, chatID, userData)
+
+	ctx, _ := b.registerBackgroundTask(chatID)
+	go b.generateScript(ctx, chatID, chatID, userData)
 }
 
 func (b *Bot) handleReviseScript(chatID int64, userData *models.UserData) {
@@ -353,10 +393,12 @@ func (b *Bot) handleRevisionInput(message *tgbotapi.Message, userData *models.Us
 	userData.State = models.StateIdle
 	b.db.SetUserData(userID, userData)
 
-	go b.reviseScript(context.Background(), chatID, userID, instructions, userData)
+	ctx, _ := b.registerBackgroundTask(userID)
+	go b.reviseScript(ctx, chatID, userID, instructions, userData)
 }
 
 func (b *Bot) reviseScript(ctx context.Context, chatID, userID int64, instructions string, userData *models.UserData) {
+	defer b.clearBackgroundTask(userID)
 	if userData.GeneratedScript == "" {
 		log.Printf("Error for user %d: no script to revise", userID)
 		b.sendErrorMessage(chatID, "analysis_error")
@@ -365,8 +407,12 @@ func (b *Bot) reviseScript(ctx context.Context, chatID, userID int64, instructio
 
 	revisedScript, err := b.geminiService.ReviseScript(ctx, userData.GeneratedScript, instructions)
 	if err != nil {
-		log.Printf("Error revising script for user %d: %v", userID, err)
-		b.sendErrorMessage(chatID, "analysis_error")
+		if errors.Is(err, context.Canceled) {
+			log.Printf("Script revision cancelled for user %d", userID)
+		} else {
+			log.Printf("Error revising script for user %d: %v", userID, err)
+			b.sendErrorMessage(chatID, "analysis_error")
+		}
 		return
 	}
 
@@ -396,7 +442,7 @@ func (b *Bot) sendPaginatedVoices(chatID int64, page int, forSelection bool) {
 	keyboard := b.getVoiceSelectionKeyboard(voices, page, forSelection)
 	msgText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "voice_list_header"})
 	if forSelection {
-		msgText = "Please select a voice:"
+		msgText, _ = b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "agreed_to_script"})
 	}
 
 	msg := tgbotapi.NewMessage(chatID, msgText)
@@ -459,10 +505,12 @@ func (b *Bot) handleVoiceSelection(callback *tgbotapi.CallbackQuery, userData *m
 	userData.State = models.StateIdle
 	b.db.SetUserData(userID, userData)
 
-	go b.generateAndSendAudio(chatID, userID, voiceID, userData)
+	ctx, _ := b.registerBackgroundTask(userID)
+	go b.generateAndSendAudio(ctx, chatID, userID, voiceID, userData)
 }
 
-func (b *Bot) generateAndSendAudio(chatID, userID int64, voiceID string, userData *models.UserData) {
+func (b *Bot) generateAndSendAudio(ctx context.Context, chatID, userID int64, voiceID string, userData *models.UserData) {
+	defer b.clearBackgroundTask(userID)
 	if userData.GeneratedScript == "" {
 		log.Printf("User %d has no script to generate audio from", userID)
 		return
@@ -472,6 +520,11 @@ func (b *Bot) generateAndSendAudio(chatID, userID int64, voiceID string, userDat
 	lines := re.Split(userData.GeneratedScript, -1)
 
 	for _, line := range lines {
+		if ctx.Err() != nil {
+			log.Printf("Audio generation cancelled for user %d", userID)
+			break
+		}
+
 		trimmedLine := strings.TrimSpace(line)
 		if trimmedLine == "" {
 			continue
@@ -489,7 +542,7 @@ func (b *Bot) generateAndSendAudio(chatID, userID int64, voiceID string, userDat
 			continue
 		}
 
-		audioBytes, err := b.elevenlabsService.TextToSpeech(voiceID, textToSpeak)
+		audioBytes, err := b.elevenlabsService.TextToSpeech(voiceID, textToSpeak, userData.Stability, userData.Clarity)
 		if err != nil {
 			log.Printf("Failed to generate audio for line '%s': %v", trimmedLine, err)
 			continue
@@ -507,14 +560,84 @@ func (b *Bot) generateAndSendAudio(chatID, userID int64, voiceID string, userDat
 		}
 	}
 
-	completionText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "audio_generation_complete"})
-	finalMsg := tgbotapi.NewMessage(chatID, completionText)
-	b.api.Send(finalMsg)
+	if ctx.Err() == nil {
+		completionText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "audio_generation_complete"})
+		finalMsg := tgbotapi.NewMessage(chatID, completionText)
+		b.api.Send(finalMsg)
+	}
+
+}
+
+func (b *Bot) sendSettingsMenu(chatID int64, userData *models.UserData, messageID int) {
+	text := fmt.Sprintf(
+		b.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "settings_menu_header"}),
+		userData.Stability,
+		userData.Clarity,
+	)
+
+	keyboard := b.getSettingsKeyboard()
+
+	if messageID == 0 {
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ParseMode = tgbotapi.ModeHTML
+		msg.ReplyMarkup = keyboard
+		b.api.Send(msg)
+	} else {
+		editMsg := tgbotapi.NewEditMessageText(chatID, messageID, text)
+		editMsg.ParseMode = tgbotapi.ModeHTML
+		editMsg.ReplyMarkup = &keyboard
+		b.api.Send(editMsg)
+	}
+}
+
+func (b *Bot) handleStabilityInput(message *tgbotapi.Message, userData *models.UserData) {
+	chatID := message.Chat.ID
+	userID := message.From.ID
+
+	value, err := strconv.ParseFloat(message.Text, 32)
+	if err != nil || value < 0.0 || value > 1.0 {
+		errorText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_invalid_value"})
+		msg := tgbotapi.NewMessage(chatID, errorText)
+		b.api.Send(msg)
+		b.sendSettingsMenu(chatID, userData, 0)
+		return
+	}
+
+	userData.Stability = float32(value)
+	userData.State = models.StateIdle
+	b.db.SetUserData(userID, userData)
+
+	successText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_updated"})
+	b.api.Send(tgbotapi.NewMessage(chatID, successText))
+	b.sendSettingsMenu(chatID, userData, 0)
+}
+
+func (b *Bot) handleClarityInput(message *tgbotapi.Message, userData *models.UserData) {
+	chatID := message.Chat.ID
+	userID := message.From.ID
+
+	value, err := strconv.ParseFloat(message.Text, 32)
+	if err != nil || value < 0.0 || value > 1.0 {
+		errorText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_invalid_value"})
+		msg := tgbotapi.NewMessage(chatID, errorText)
+		b.api.Send(msg)
+		b.sendSettingsMenu(chatID, userData, 0)
+		return
+	}
+
+	userData.Clarity = float32(value)
+	userData.State = models.StateIdle
+	b.db.SetUserData(userID, userData)
+
+	successText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_updated"})
+	b.api.Send(tgbotapi.NewMessage(chatID, successText))
+	b.sendSettingsMenu(chatID, userData, 0)
 }
 
 func (b *Bot) getStartKeyboard() tgbotapi.InlineKeyboardMarkup {
 	createScriptButtonText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "create_script_button"})
 	textToVoiceButtonText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "button_text_to_voice"})
+	settingsButtonText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_button_main"})
 
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -522,6 +645,9 @@ func (b *Bot) getStartKeyboard() tgbotapi.InlineKeyboardMarkup {
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(textToVoiceButtonText, "show_voice_tutorial"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(settingsButtonText, "settings"),
 		),
 	)
 }
@@ -557,12 +683,16 @@ func (b *Bot) getScriptActionKeyboard() tgbotapi.InlineKeyboardMarkup {
 	agreeText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "button_agree"})
 	regenText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "button_regenerate"})
 	reviseText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "button_revise"})
+	cancelText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "button_cancel"})
 
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(agreeText, "agree_script"),
 			tgbotapi.NewInlineKeyboardButtonData(regenText, "regenerate_script"),
 			tgbotapi.NewInlineKeyboardButtonData(reviseText, "revise_script"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(cancelText, "cancel_process"),
 		),
 	)
 }
@@ -582,7 +712,7 @@ func (b *Bot) getVoiceSelectionKeyboard(voices []models.Voice, page int, forSele
 		if buttonText == "" {
 			buttonText = voices[i].VoiceID
 		}
-		
+
 		var callbackData string
 		if forSelection {
 			callbackData = "voice_" + voices[i].VoiceID
@@ -622,9 +752,25 @@ func (b *Bot) getVoiceSelectionKeyboard(voices []models.Voice, page int, forSele
 		rows = append(rows, navRow)
 	}
 
-	if forSelection { // Only add cancel button if it's for the main selection process
+	if forSelection {
 		rows = append(rows, b.getCancelKeyboard().InlineKeyboard...)
 	}
 
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
+}
+
+func (b *Bot) getSettingsKeyboard() tgbotapi.InlineKeyboardMarkup {
+	stabilityBtn, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_button_stability"})
+	clarityBtn, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_button_clarity"})
+	backBtn, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_button_back"})
+
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(stabilityBtn, "set_stability"),
+			tgbotapi.NewInlineKeyboardButtonData(clarityBtn, "set_clarity"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(backBtn, "back_to_main_menu"),
+		),
+	)
 }

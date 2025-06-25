@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"video-script-bot/internal/models"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -37,16 +38,63 @@ func (s *Storage) initDB() error {
         script_style TEXT,
         generated_script TEXT
     );`
-	_, err := s.db.Exec(query)
-	return err
+	if _, err := s.db.Exec(query); err != nil {
+		return err
+	}
+
+	if !s.columnExists("users", "stability") {
+		log.Println("Database migration: adding 'stability' column to 'users' table.")
+		_, err := s.db.Exec("ALTER TABLE users ADD COLUMN stability REAL DEFAULT 0.75")
+		if err != nil {
+			return fmt.Errorf("failed to add stability column: %w", err)
+		}
+	}
+	if !s.columnExists("users", "clarity") {
+		log.Println("Database migration: adding 'clarity' column to 'users' table.")
+		_, err := s.db.Exec("ALTER TABLE users ADD COLUMN clarity REAL DEFAULT 0.75")
+		if err != nil {
+			return fmt.Errorf("failed to add clarity column: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *Storage) columnExists(tableName, columnName string) bool {
+	// Sanitize table name to prevent SQL injection, although it's internally controlled here.
+	cleanTableName := strings.ReplaceAll(tableName, "'", "''")
+	query := fmt.Sprintf("PRAGMA table_info('%s')", cleanTableName)
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		log.Printf("Could not query table info for %s: %v", tableName, err)
+		return false
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name string
+		var type_ string
+		var notnull int
+		var dflt_value interface{}
+		var pk int
+		if err := rows.Scan(&cid, &name, &type_, &notnull, &dflt_value, &pk); err != nil {
+			log.Printf("Could not scan table info row: %v", err)
+			continue
+		}
+		if name == columnName {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Storage) GetUserData(userID int64) (*models.UserData, error) {
 	var userData models.UserData
-	query := `SELECT state, video_file_id, video_mime_type, script_style, generated_script FROM users WHERE user_id = ?`
+	query := `SELECT state, video_file_id, video_mime_type, script_style, generated_script, stability, clarity FROM users WHERE user_id = ?`
 
-	// Use pointers to sql.NullString for nullable text fields
 	var videoFileID, videoMimeType, scriptStyle, generatedScript sql.NullString
+	var stability, clarity sql.NullFloat64
 
 	err := s.db.QueryRow(query, userID).Scan(
 		&userData.State,
@@ -54,10 +102,11 @@ func (s *Storage) GetUserData(userID int64) (*models.UserData, error) {
 		&videoMimeType,
 		&scriptStyle,
 		&generatedScript,
+		&stability,
+		&clarity,
 	)
 
 	if err == sql.ErrNoRows {
-		// User does not exist, create a new one with default values
 		log.Printf("User %d not found in DB, creating new entry.", userID)
 		defaultUserData := models.NewDefaultUserData()
 		if err := s.SetUserData(userID, defaultUserData); err != nil {
@@ -68,19 +117,28 @@ func (s *Storage) GetUserData(userID int64) (*models.UserData, error) {
 		return nil, fmt.Errorf("failed to query user data for user %d: %w", userID, err)
 	}
 
-	// Convert sql.NullString to string
 	userData.VideoFileID = videoFileID.String
 	userData.VideoMimeType = videoMimeType.String
 	userData.ScriptStyle = scriptStyle.String
 	userData.GeneratedScript = generatedScript.String
+	if stability.Valid {
+		userData.Stability = float32(stability.Float64)
+	} else {
+		userData.Stability = models.DefaultStability
+	}
+	if clarity.Valid {
+		userData.Clarity = float32(clarity.Float64)
+	} else {
+		userData.Clarity = models.DefaultClarity
+	}
 
 	return &userData, nil
 }
 
 func (s *Storage) SetUserData(userID int64, data *models.UserData) error {
 	query := `
-    INSERT OR REPLACE INTO users (user_id, state, video_file_id, video_mime_type, script_style, generated_script)
-    VALUES (?, ?, ?, ?, ?, ?);`
+    INSERT OR REPLACE INTO users (user_id, state, video_file_id, video_mime_type, script_style, generated_script, stability, clarity)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?);`
 
 	_, err := s.db.Exec(query,
 		userID,
@@ -89,11 +147,13 @@ func (s *Storage) SetUserData(userID int64, data *models.UserData) error {
 		data.VideoMimeType,
 		data.ScriptStyle,
 		data.GeneratedScript,
+		data.Stability,
+		data.Clarity,
 	)
 
 	if err != nil {
 		return fmt.Errorf("failed to set user data for user %d: %w", userID, err)
 	}
-	log.Printf("Data for user %d saved to DB. State: %s", userID, data.State)
+	log.Printf("Data for user %d saved to DB. State: %s, Stability: %.2f, Clarity: %.2f", userID, data.State, data.Stability, data.Clarity)
 	return nil
 }

@@ -11,10 +11,98 @@ import (
 	"video-script-bot/internal/models"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/google/uuid"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 )
 
 const voicesPerPage = 6
+
+func (b *Bot) handleInlineQuery(inlineQuery *tgbotapi.InlineQuery) {
+	query := inlineQuery.Query
+	userID := inlineQuery.From.ID
+
+	parts := strings.SplitN(query, " ", 2)
+	if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+		answer := tgbotapi.InlineConfig{
+			InlineQueryID:     inlineQuery.ID,
+			Results:           []interface{}{},
+			IsPersonal:        true,
+			SwitchPMText:      b.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "inline_guide_button"}),
+			SwitchPMParameter: "inline_help",
+		}
+		if _, err := b.api.Request(answer); err != nil {
+			log.Printf("Failed to send inline query guide response: %v", err)
+		}
+		return
+	}
+
+	voiceName := parts[0]
+	textToConvert := parts[1]
+
+	if len(textToConvert) > 250 {
+		return
+	}
+
+	userData, err := b.db.GetUserData(userID)
+	if err != nil {
+		log.Printf("Could not get user data for inline query from user %d: %v. Falling back to defaults.", userID, err)
+		userData = models.NewDefaultUserData()
+	}
+
+	var results []interface{}
+	allVoices := b.elevenlabsService.GetVoices()
+
+	for _, voice := range allVoices {
+		if strings.HasPrefix(strings.ToLower(voice.Name), strings.ToLower(voiceName)) {
+			audioBytes, err := b.elevenlabsService.TextToSpeech(voice.VoiceID, textToConvert, userData.Stability, userData.Clarity)
+			if err != nil {
+				log.Printf("Inline audio generation failed for voice %s: %v", voice.Name, err)
+				continue
+			}
+
+			descriptiveFilename := fmt.Sprintf("%s.mp3", textToConvert)
+			audioFile := tgbotapi.FileBytes{Name: descriptiveFilename, Bytes: audioBytes}
+			audioMsg := tgbotapi.NewAudio(b.cfg.StorageChannelID, audioFile)
+			audioMsg.Title = textToConvert
+			audioMsg.Performer = voice.Name
+
+			sentMsg, err := b.api.Send(audioMsg)
+			if err != nil {
+				log.Printf("Failed to send audio to storage channel: %v", err)
+				continue
+			}
+
+			if sentMsg.Audio == nil {
+				log.Printf("Message sent to storage channel does not contain audio")
+				continue
+			}
+
+			fileID := sentMsg.Audio.FileID
+			result := tgbotapi.NewInlineQueryResultCachedAudio(uuid.NewString(), fileID)
+			result.Caption = textToConvert
+
+			results = append(results, result)
+		}
+	}
+
+	answer := tgbotapi.InlineConfig{
+		InlineQueryID: inlineQuery.ID,
+		Results:       results,
+		CacheTime:     1,
+		IsPersonal:    true,
+	}
+
+	if _, err := b.api.Request(answer); err != nil {
+		log.Printf("Failed to send inline query response: %v", err)
+	}
+}
+
+func (b *Bot) sendInlineHelp(chatID int64) {
+	text, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "inline_help_message"})
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = tgbotapi.ModeHTML
+	b.api.Send(msg)
+}
 
 func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery, userData *models.UserData) {
 	ack := tgbotapi.NewCallback(callback.ID, "")
@@ -102,7 +190,11 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery, userData *mo
 func (b *Bot) handleCommand(message *tgbotapi.Message, userData *models.UserData) {
 	switch message.Command() {
 	case "start":
-		b.handleStartCommand(message.Chat.ID)
+		if strings.Contains(message.CommandArguments(), "inline_help") {
+			b.sendInlineHelp(message.Chat.ID)
+		} else {
+			b.handleStartCommand(message.Chat.ID)
+		}
 	case "settings":
 		b.sendSettingsMenu(message.Chat.ID, userData, 0)
 	case "voice":

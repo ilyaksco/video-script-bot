@@ -72,6 +72,11 @@ func (b *Bot) Start() {
 	updates := b.api.GetUpdatesChan(u)
 
 	for update := range updates {
+		if update.InlineQuery != nil {
+			go b.handleInlineQuery(update.InlineQuery)
+			continue
+		}
+
 		var userID int64
 		var chatID int64
 		var isCallback bool

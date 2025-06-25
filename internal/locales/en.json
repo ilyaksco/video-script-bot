@@ -4,7 +4,7 @@
   "button_text_to_voice": "🔊 Text to Speech",
   "settings_button_main": "⚙️ Settings",
   "voice_tutorial_message": "<b>How to Use the Text to Voice Feature</b>\n\nThis feature allows you to directly convert text into audio.\n\n<b>Command Format:</b>\n<code>/voice [voice_name] [your text]</code>\n\n<b>Example:</b>\n<code>/voice Rachel Hi, this is a test audio.</code>\n\n<i>To see the list of available voices, use the /listvoices command. You can also change audio settings with the /settings command.</i>",
-  "upload_video_prompt": "Alright! Please upload your video now. You can cancel this process by typing <code>/cancel</code> or pressing the cancel button below.",
+  "upload_video_prompt": "Alright! Please upload your video now. You can cancel this process by pressing the cancel button below.",
   "video_received_confirmation": "Video received! Processing...",
   "please_upload_video": "Please upload a video file.",
   "processing_video": "Your video is being analyzed. Please wait, this may take a moment...",

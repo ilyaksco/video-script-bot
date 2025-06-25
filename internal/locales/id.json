@@ -4,7 +4,7 @@
   "button_text_to_voice": "🔊 Text ke Suara",
   "settings_button_main": "⚙️ Pengaturan",
   "voice_tutorial_message": "<b>Cara Menggunakan Fitur Text to Voice</b>\n\nFitur ini memungkinkan Anda mengubah teks menjadi audio secara langsung.\n\n<b>Format Perintah:</b>\n<code>/voice [nama_suara] [teks Anda]</code>\n\n<b>Contoh Penggunaan:</b>\n<code>/voice Rachel Halo, ini adalah audio percobaan.</code>\n\n<i>Untuk melihat daftar nama suara yang tersedia, gunakan perintah /listvoices. Anda juga bisa mengubah pengaturan audio lewat perintah /settings.</i>",
-  "upload_video_prompt": "Baik! Silakan unggah video Anda sekarang. Anda bisa membatalkan proses ini dengan mengetik <code>/cancel</code> atau menekan tombil cancel di bawah ini.",
+  "upload_video_prompt": "Baik! Silakan unggah video Anda sekarang. Anda bisa membatalkan proses ini dengan menekan tombol cancel di bawah ini.",
   "video_received_confirmation": "Video telah diterima! Sedang diproses...",
   "please_upload_video": "Mohon unggah file video.",
   "processing_video": "Video Anda sedang dianalisis. Mohon tunggu sebentar, ini mungkin memakan waktu beberapa saat...",
@@ -45,7 +45,7 @@
   "prompt_clarity": "Masukkan nilai <b>Kejelasan</b> baru (angka antara 0.0 dan 1.0).\n\nKejelasan yang lebih tinggi membuat suara lebih mirip dengan suara asli, tetapi dapat menyebabkan suara lebih robotik. Nilai yang lebih rendah membuatnya lebih stabil tetapi kurang mirip. Nilai default adalah 0.75.",
   "settings_updated": "Pengaturan berhasil diperbarui!",
   "settings_invalid_value": "Nilai tidak valid. Harap masukkan angka antara 0.0 dan 1.0.",
-  "inline_guide_button": "💡 Bantuan: Cara Penggunaan",
+  "inline_guide_button": "💡 butuh bantuan ?",
   "inline_help_message": "<b>Mode Inline</b>\n\nAnda dapat menggunakan bot ini langsung di chat manapun untuk mengubah teks menjadi audio.\n\n<b>Format:</b>\n<code>@ttsmakebot [nama_suara] [teks Anda]</code>\n\n<b>Contoh:</b>\n<code>@ttsmakebot Rachel halo apa kabar?</code>\n\nPilih hasil suara yang muncul, dan bot akan mengirimkan audio tersebut ke chat.",
   "inline_result_title": "Suara: %s"
 }

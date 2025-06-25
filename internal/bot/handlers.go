@@ -81,7 +81,7 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery, userData *mo
 func (b *Bot) handleCommand(message *tgbotapi.Message, userData *models.UserData) {
 	switch message.Command() {
 	case "start":
-		b.handleCancelCommand(message, userData)
+		b.handleStartCommand(message.Chat.ID)
 	case "voice":
 		b.handleVoiceCommand(message)
 	case "listvoices":
@@ -96,12 +96,7 @@ func (b *Bot) handleCommand(message *tgbotapi.Message, userData *models.UserData
 }
 
 func (b *Bot) handleListVoicesCommand(chatID int64) {
-	header, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "voice_list_header"})
-	msg := tgbotapi.NewMessage(chatID, header)
-	msg.ParseMode = tgbotapi.ModeHTML
-	b.api.Send(msg)
-	
-	b.sendPaginatedVoices(chatID, 0, false) // `false` indicates we don't need a cancel button here
+	b.sendPaginatedVoices(chatID, 0, false) 
 }
 
 func (b *Bot) handleHelpCommand(chatID int64) {
@@ -119,7 +114,6 @@ func (b *Bot) handleCancelCommand(message *tgbotapi.Message, userData *models.Us
 	msg := tgbotapi.NewMessage(message.Chat.ID, cancelText)
 	b.api.Send(msg)
 
-	b.handleStartCommand(message.Chat.ID)
 }
 
 func (b *Bot) handleVoiceCommand(message *tgbotapi.Message) {

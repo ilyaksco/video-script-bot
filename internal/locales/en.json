@@ -47,5 +47,8 @@
   "settings_invalid_value": "Invalid value. Please enter a number between 0.0 and 1.0.",
   "inline_guide_button": "💡 Help: How to Use",
   "inline_help_message": "<b>Inline Mode</b>\n\nYou can use this bot directly in any chat to convert text to audio.\n\n<b>Format:</b>\n<code>@ttsmakebot [voice_name] [your text]</code>\n\n<b>Example:</b>\n<code>@ttsmakebot Rachel hi how are you?</code>\n\nChoose the voice result that appears, and the bot will send the audio to the chat.",
-  "inline_result_title": "Voice: %s"
+  "inline_result_title": "Voice: %s",
+  "donate_message": "Support the development of this bot by donating! Every bit of support is greatly appreciated.",
+  "button_saweria": "Saweria",
+  "button_buymeacoffee": "Buy Me a Coffee"
 }

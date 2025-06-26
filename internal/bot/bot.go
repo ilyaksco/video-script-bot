@@ -23,6 +23,7 @@ type Bot struct {
 	geminiService     *ai.GeminiService
 	elevenlabsService *ai.ElevenLabsService
 	activeTasks       sync.Map
+	userLocks         sync.Map
 }
 
 func New(cfg *config.Config, localizer *i18n.Localizer, db *storage.Storage, geminiService *ai.GeminiService, elevenlabsService *ai.ElevenLabsService) (*Bot, error) {
@@ -42,6 +43,7 @@ func New(cfg *config.Config, localizer *i18n.Localizer, db *storage.Storage, gem
 		geminiService:     geminiService,
 		elevenlabsService: elevenlabsService,
 		activeTasks:       sync.Map{},
+		userLocks:         sync.Map{},
 	}
 
 	if err := bot.setCommands(); err != nil {
@@ -72,58 +74,65 @@ func (b *Bot) Start() {
 	updates := b.api.GetUpdatesChan(u)
 
 	for update := range updates {
-		if update.InlineQuery != nil {
-			go b.handleInlineQuery(update.InlineQuery)
-			continue
-		}
-
-		var userID int64
-		var chatID int64
-		var isCallback bool
-
-		if update.CallbackQuery != nil {
-			userID = update.CallbackQuery.From.ID
-			chatID = update.CallbackQuery.Message.Chat.ID
-			isCallback = true
-		} else if update.Message != nil {
-			userID = update.Message.From.ID
-			chatID = update.Message.Chat.ID
-		} else {
-			continue
-		}
-
-		userData, err := b.db.GetUserData(userID)
-		if err != nil {
-			log.Printf("FATAL: Could not get or create user data for user %d: %v", userID, err)
-			b.sendErrorMessage(chatID, "database_error")
-			continue
-		}
-
-		if isCallback {
-			b.handleCallbackQuery(update.CallbackQuery, userData)
-			continue
-		}
-
-		if update.Message != nil {
-			log.Printf("Received message from [ID: %d] with state [%s]", userID, userData.State)
-			if update.Message.IsCommand() {
-				b.handleCommand(update.Message, userData)
-				continue
+		go func(upd tgbotapi.Update) {
+			if upd.InlineQuery != nil {
+				b.handleInlineQuery(upd.InlineQuery)
+				return
 			}
 
-			switch userData.State {
-			case models.StateWaitingForVideo:
-				b.handleVideoUpload(update.Message, userData)
-			case models.StateWaitingForCustomStyle:
-				b.handleCustomStyleInput(update.Message, userData)
-			case models.StateWaitingForRevision:
-				b.handleRevisionInput(update.Message, userData)
-			case models.StateWaitingForStability:
-				b.handleStabilityInput(update.Message, userData)
-			case models.StateWaitingForClarity:
-				b.handleClarityInput(update.Message, userData)
+			var userID int64
+			var chatID int64
+			var isCallback bool
+
+			if upd.CallbackQuery != nil {
+				userID = upd.CallbackQuery.From.ID
+				chatID = upd.CallbackQuery.Message.Chat.ID
+				isCallback = true
+			} else if upd.Message != nil {
+				userID = upd.Message.From.ID
+				chatID = upd.Message.Chat.ID
+			} else {
+				return
 			}
-		}
+
+			mu, _ := b.userLocks.LoadOrStore(userID, &sync.Mutex{})
+			userMutex := mu.(*sync.Mutex)
+			userMutex.Lock()
+			defer userMutex.Unlock()
+
+			userData, err := b.db.GetUserData(userID)
+			if err != nil {
+				log.Printf("FATAL: Could not get or create user data for user %d: %v", userID, err)
+				b.sendErrorMessage(chatID, "database_error")
+				return
+			}
+
+			if isCallback {
+				b.handleCallbackQuery(upd.CallbackQuery, userData)
+				return
+			}
+
+			if upd.Message != nil {
+				log.Printf("Received message from [ID: %d] with state [%s]", userID, userData.State)
+				if upd.Message.IsCommand() {
+					b.handleCommand(upd.Message, userData)
+					return
+				}
+
+				switch userData.State {
+				case models.StateWaitingForVideo:
+					b.handleVideoUpload(upd.Message, userData)
+				case models.StateWaitingForCustomStyle:
+					b.handleCustomStyleInput(upd.Message, userData)
+				case models.StateWaitingForRevision:
+					b.handleRevisionInput(upd.Message, userData)
+				case models.StateWaitingForStability:
+					b.handleStabilityInput(upd.Message, userData)
+				case models.StateWaitingForClarity:
+					b.handleClarityInput(upd.Message, userData)
+				}
+			}
+		}(update)
 	}
 }
 

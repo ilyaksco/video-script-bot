@@ -17,6 +17,8 @@ type Config struct {
 	DefaultLang       string
 	DatabasePath      string
 	StorageChannelID  int64
+	SaweriaLink       string
+	BuyMeACoffeeLink  string
 }
 
 func LoadConfig() *Config {
@@ -42,6 +44,8 @@ func LoadConfig() *Config {
 		DefaultLang:       getEnv("DEFAULT_LANG", "en", false),
 		DatabasePath:      getEnv("DATABASE_PATH", "./bot_data.db", false),
 		StorageChannelID:  storageID,
+		SaweriaLink:       getEnv("SAWERIA_LINK", "", false),
+		BuyMeACoffeeLink:  getEnv("BUYMEACOFFEE_LINK", "", false),
 	}
 }
 

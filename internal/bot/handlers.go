@@ -203,6 +203,8 @@ func (b *Bot) handleCommand(message *tgbotapi.Message, userData *models.UserData
 		b.handleListVoicesCommand(message.Chat.ID)
 	case "help":
 		b.handleHelpCommand(message.Chat.ID)
+	case "donate": // <-- PENAMBAHAN DI SINI
+        b.handleDonateCommand(message.Chat.ID)
 	case "cancel":
 		b.handleCancelCommand(message, userData)
 	default:
@@ -219,6 +221,14 @@ func (b *Bot) handleHelpCommand(chatID int64) {
 	msg := tgbotapi.NewMessage(chatID, helpText)
 	msg.ParseMode = tgbotapi.ModeHTML
 	b.api.Send(msg)
+}
+
+func (b *Bot) handleDonateCommand(chatID int64) {
+    donateText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "donate_message"})
+    msg := tgbotapi.NewMessage(chatID, donateText)
+    msg.ParseMode = tgbotapi.ModeHTML
+    msg.ReplyMarkup = b.getDonateKeyboard() // Menggunakan keyboard donasi
+    b.api.Send(msg)
 }
 
 func (b *Bot) handleCancelCommand(message *tgbotapi.Message, userData *models.UserData) {
@@ -849,6 +859,27 @@ func (b *Bot) getVoiceSelectionKeyboard(voices []models.Voice, page int, forSele
 	}
 
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
+}
+
+func (b *Bot) getDonateKeyboard() tgbotapi.InlineKeyboardMarkup {
+    var rows [][]tgbotapi.InlineKeyboardButton
+    var buttons []tgbotapi.InlineKeyboardButton
+
+    saweriaText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "button_saweria"})
+    bmacText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "button_buymeacoffee"})
+
+    if b.cfg.SaweriaLink != "" {
+        buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonURL(saweriaText, b.cfg.SaweriaLink))
+    }
+    if b.cfg.BuyMeACoffeeLink != "" {
+        buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonURL(bmacText, b.cfg.BuyMeACoffeeLink))
+    }
+
+    if len(buttons) > 0 {
+        rows = append(rows, buttons)
+    }
+
+    return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
 func (b *Bot) getSettingsKeyboard() tgbotapi.InlineKeyboardMarkup {

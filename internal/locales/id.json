@@ -47,5 +47,8 @@
   "settings_invalid_value": "Nilai tidak valid. Harap masukkan angka antara 0.0 dan 1.0.",
   "inline_guide_button": "💡 butuh bantuan ?",
   "inline_help_message": "<b>Mode Inline</b>\n\nAnda dapat menggunakan bot ini langsung di chat manapun untuk mengubah teks menjadi audio.\n\n<b>Format:</b>\n<code>@ttsmakebot [nama_suara] [teks Anda]</code>\n\n<b>Contoh:</b>\n<code>@ttsmakebot Rachel halo apa kabar?</code>\n\nPilih hasil suara yang muncul, dan bot akan mengirimkan audio tersebut ke chat.",
-  "inline_result_title": "Suara: %s"
+  "inline_result_title": "Suara: %s",
+  "donate_message": "Dukung pengembangan bot ini dengan berdonasi! Setiap dukungan sangat berarti.",
+  "button_saweria": "Saweria",
+  "button_buymeacoffee": "Buy Me a Coffee"
 }

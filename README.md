@@ -20,7 +20,6 @@ Sebuah bot Telegram fungsional yang dibangun dari awal menggunakan bahasa Go. Bo
 
 - **🎬 Video menjadi Skrip**: Unggah video, dan bot akan menganalisis isinya untuk membuat skrip detail lengkap dengan penanda waktu (timestamp).
 - **🎨 Berbagai Gaya Skrip**: Pilih gaya skrip "Profesional", "Naratif", atau masukkan gaya "Kustom" sesuai keinginan Anda.
-- **🔄 Alur Kerja Interaktif**: Anda bisa menyetujui, membuat ulang, atau merevisi skrip yang dihasilkan AI dengan instruksi teks.
 - **🔊 Teks menjadi Suara**: Ubah skrip final menjadi narasi audio berkualitas tinggi dengan berbagai pilihan suara dari ElevenLabs.
 - **🗣️ Perintah Suara Langsung**: Gunakan perintah `/voice` untuk mengubah teks menjadi audio secara cepat tanpa harus mengunggah video.
 - **🔐 Penanganan API yang Andal**: Dilengkapi fitur rotasi kunci API yang akan otomatis beralih ke kunci cadangan jika kunci utama kehabisan kuota.
@@ -129,6 +128,12 @@ Semua pengaturan bot dikelola melalui file `.env` dan `voices.json`.
 - `DEFAULT_LANG`: Bahasa default bot (`id` atau `en`).
 - `DATABASE_PATH`: Lokasi file untuk database SQLite (contoh: `./bot_data.db`).
 
+> **⚠️ Peringatan Penting Mengenai Penggunaan Kunci API**
+>
+> Fitur rotasi kunci API ini ditujukan untuk **mengelola credits dari maksimal 2 akun saja**. Menggunakan banyak akun gratis dari **satu alamat IP yang sama** untuk menghindari batas penggunaan adalah tindakan yang melanggar Ketentuan Layanan sebagian besar penyedia API (termasuk Google dan ElevenLabs).
+>
+> **Risiko:** Alamat IP Anda bisa **diblokir secara permanen** dari layanan gratis mereka, dan Anda mungkin akan diminta untuk beralih ke paket berbayar. Gunakan fitur ini dengan bijak dan adil.
+
 ### File `voices.json`
 
 File ini memungkinkan Anda untuk mengubah daftar suara yang tersedia tanpa harus mengubah kode. Cukup tambah atau hapus objek suara sesuai kebutuhan.
@@ -145,3 +150,4 @@ File ini memungkinkan Anda untuk mengubah daftar suara yang tersedia tanpa harus
     }
   ]
 }
+

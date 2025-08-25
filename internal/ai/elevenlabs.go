@@ -90,7 +90,7 @@ func (s *ElevenLabsService) GetVoices() []models.Voice {
 	return s.voices
 }
 
-func (s *ElevenLabsService) TextToSpeech(voiceID, text string, stability, clarity float32) ([]byte, error) {
+func (s *ElevenLabsService) TextToSpeech(voiceID, text string, stability, clarity, speed float32) ([]byte, error) {
 	apiURL := fmt.Sprintf("%s/text-to-speech/%s", elevenLabsAPIURL, voiceID)
 	payload := map[string]interface{}{
 		"text":     text,
@@ -98,7 +98,15 @@ func (s *ElevenLabsService) TextToSpeech(voiceID, text string, stability, clarit
 		"voice_settings": map[string]float32{
 			"stability":        stability,
 			"similarity_boost": clarity,
+			"style":            0.5, // Nilai default yang disarankan
+			"use_speaker_boost": 1,
 		},
+		"pronunciation_dictionary_locators": []map[string]interface{}{},
+		"seed":                nil,
+		"previous_text":       nil,
+		"next_text":           nil,
+		"previous_request_ids":[]string{},
+		"next_request_ids":  []string{},
 	}
 	jsonPayload, _ := json.Marshal(payload)
 

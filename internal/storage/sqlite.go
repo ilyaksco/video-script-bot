@@ -56,6 +56,13 @@ func (s *Storage) initDB() error {
 			return fmt.Errorf("failed to add clarity column: %w", err)
 		}
 	}
+	if !s.columnExists("users", "speed") {
+		log.Println("Database migration: adding 'speed' column to 'users' table.")
+		_, err := s.db.Exec("ALTER TABLE users ADD COLUMN speed REAL DEFAULT 1.0")
+		if err != nil {
+			return fmt.Errorf("failed to add speed column: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -91,10 +98,10 @@ func (s *Storage) columnExists(tableName, columnName string) bool {
 
 func (s *Storage) GetUserData(userID int64) (*models.UserData, error) {
 	var userData models.UserData
-	query := `SELECT state, video_file_id, video_mime_type, script_style, generated_script, stability, clarity FROM users WHERE user_id = ?`
+	query := `SELECT state, video_file_id, video_mime_type, script_style, generated_script, stability, clarity, speed FROM users WHERE user_id = ?`
 
 	var videoFileID, videoMimeType, scriptStyle, generatedScript sql.NullString
-	var stability, clarity sql.NullFloat64
+	var stability, clarity, speed sql.NullFloat64
 
 	err := s.db.QueryRow(query, userID).Scan(
 		&userData.State,
@@ -104,6 +111,7 @@ func (s *Storage) GetUserData(userID int64) (*models.UserData, error) {
 		&generatedScript,
 		&stability,
 		&clarity,
+		&speed,
 	)
 
 	if err == sql.ErrNoRows {
@@ -131,14 +139,19 @@ func (s *Storage) GetUserData(userID int64) (*models.UserData, error) {
 	} else {
 		userData.Clarity = models.DefaultClarity
 	}
+	if speed.Valid {
+		userData.Speed = float32(speed.Float64)
+	} else {
+		userData.Speed = models.DefaultSpeed
+	}
 
 	return &userData, nil
 }
 
 func (s *Storage) SetUserData(userID int64, data *models.UserData) error {
 	query := `
-    INSERT OR REPLACE INTO users (user_id, state, video_file_id, video_mime_type, script_style, generated_script, stability, clarity)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?);`
+    INSERT OR REPLACE INTO users (user_id, state, video_file_id, video_mime_type, script_style, generated_script, stability, clarity, speed)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`
 
 	_, err := s.db.Exec(query,
 		userID,
@@ -149,11 +162,12 @@ func (s *Storage) SetUserData(userID int64, data *models.UserData) error {
 		data.GeneratedScript,
 		data.Stability,
 		data.Clarity,
+		data.Speed,
 	)
 
 	if err != nil {
 		return fmt.Errorf("failed to set user data for user %d: %w", userID, err)
 	}
-	log.Printf("Data for user %d saved to DB. State: %s, Stability: %.2f, Clarity: %.2f", userID, data.State, data.Stability, data.Clarity)
+	log.Printf("Data for user %d saved to DB. State: %s, Stability: %.2f, Clarity: %.2f, Speed: %.2f", userID, data.State, data.Stability, data.Clarity, data.Speed)
 	return nil
 }

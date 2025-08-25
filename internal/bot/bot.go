@@ -130,6 +130,8 @@ func (b *Bot) Start() {
 					b.handleStabilityInput(upd.Message, userData)
 				case models.StateWaitingForClarity:
 					b.handleClarityInput(upd.Message, userData)
+				case models.StateWaitingForSpeed:
+					b.handleSpeedInput(upd.Message, userData)
 				}
 			}
 		}(update)

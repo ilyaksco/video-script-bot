@@ -54,7 +54,7 @@ func (b *Bot) handleInlineQuery(inlineQuery *tgbotapi.InlineQuery) {
 
 	for _, voice := range allVoices {
 		if strings.HasPrefix(strings.ToLower(voice.Name), strings.ToLower(voiceName)) {
-			audioBytes, err := b.elevenlabsService.TextToSpeech(voice.VoiceID, textToConvert, userData.Stability, userData.Clarity)
+			audioBytes, err := b.elevenlabsService.TextToSpeech(voice.VoiceID, textToConvert, userData.Stability, userData.Clarity, userData.Speed)			
 			if err != nil {
 				log.Printf("Inline audio generation failed for voice %s: %v", voice.Name, err)
 				continue
@@ -178,6 +178,13 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery, userData *mo
 		b.api.Send(msg)
 		userData.State = models.StateWaitingForClarity
 		b.db.SetUserData(userID, userData)
+	case "set_speed":
+		promptText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "prompt_speed"})
+		msg := tgbotapi.NewMessage(chatID, promptText)
+		msg.ParseMode = tgbotapi.ModeHTML
+		b.api.Send(msg)
+		userData.State = models.StateWaitingForSpeed
+		b.db.SetUserData(userID, userData)
 	case "back_to_main_menu":
 		b.handleStartCommand(chatID)
 		editMsg := tgbotapi.NewEditMessageReplyMarkup(chatID, callback.Message.MessageID, tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}})
@@ -297,7 +304,7 @@ func (b *Bot) handleVoiceCommand(message *tgbotapi.Message, userData *models.Use
 	b.api.Send(msg)
 
 	go func() {
-		audioBytes, err := b.elevenlabsService.TextToSpeech(voiceID, textToConvert, userData.Stability, userData.Clarity)
+		audioBytes, err := b.elevenlabsService.TextToSpeech(voiceID, textToConvert, userData.Stability, userData.Clarity, userData.Speed)
 		if err != nil {
 			log.Printf("Failed to generate direct audio for user %d: %v", message.From.ID, err)
 			b.sendErrorMessage(chatID, "audio_generation_error")
@@ -644,7 +651,7 @@ func (b *Bot) generateAndSendAudio(ctx context.Context, chatID, userID int64, vo
 			continue
 		}
 
-		audioBytes, err := b.elevenlabsService.TextToSpeech(voiceID, textToSpeak, userData.Stability, userData.Clarity)
+		audioBytes, err := b.elevenlabsService.TextToSpeech(voiceID, textToSpeak, userData.Stability, userData.Clarity, userData.Speed)
 		if err != nil {
 			log.Printf("Failed to generate audio for line '%s': %v", trimmedLine, err)
 			continue
@@ -675,6 +682,7 @@ func (b *Bot) sendSettingsMenu(chatID int64, userData *models.UserData, messageI
 		b.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "settings_menu_header"}),
 		userData.Stability,
 		userData.Clarity,
+		userData.Speed,
 	)
 
 	keyboard := b.getSettingsKeyboard()
@@ -691,6 +699,30 @@ func (b *Bot) sendSettingsMenu(chatID int64, userData *models.UserData, messageI
 		b.api.Send(editMsg)
 	}
 }
+
+// --- PENAMBAHAN FUNGSI BARU DIMULAI ---
+func (b *Bot) handleSpeedInput(message *tgbotapi.Message, userData *models.UserData) {
+	chatID := message.Chat.ID
+	userID := message.From.ID
+
+	value, err := strconv.ParseFloat(message.Text, 32)
+	if err != nil || value < 0.5 || value > 2.0 {
+		errorText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_invalid_speed_value"})
+		msg := tgbotapi.NewMessage(chatID, errorText)
+		b.api.Send(msg)
+		b.sendSettingsMenu(chatID, userData, 0)
+		return
+	}
+
+	userData.Speed = float32(value)
+	userData.State = models.StateIdle
+	b.db.SetUserData(userID, userData)
+
+	successText, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_updated"})
+	b.api.Send(tgbotapi.NewMessage(chatID, successText))
+	b.sendSettingsMenu(chatID, userData, 0)
+}
+// --- PENAMBAHAN FUNGSI BARU SELESAI ---
 
 func (b *Bot) handleStabilityInput(message *tgbotapi.Message, userData *models.UserData) {
 	chatID := message.Chat.ID
@@ -885,12 +917,16 @@ func (b *Bot) getDonateKeyboard() tgbotapi.InlineKeyboardMarkup {
 func (b *Bot) getSettingsKeyboard() tgbotapi.InlineKeyboardMarkup {
 	stabilityBtn, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_button_stability"})
 	clarityBtn, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_button_clarity"})
+	speedBtn, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_button_speed"})
 	backBtn, _ := b.localizer.Localize(&i18n.LocalizeConfig{MessageID: "settings_button_back"})
 
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(stabilityBtn, "set_stability"),
 			tgbotapi.NewInlineKeyboardButtonData(clarityBtn, "set_clarity"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(speedBtn, "set_speed"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(backBtn, "back_to_main_menu"),

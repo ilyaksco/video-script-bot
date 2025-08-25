@@ -3,6 +3,7 @@ package models
 const (
 	DefaultStability = 0.75
 	DefaultClarity   = 0.75
+	DefaultSpeed = 1.0
 )
 
 type UserState string
@@ -16,6 +17,7 @@ const (
 	StateWaitingForVoiceSelection UserState = "waiting_for_voice_selection"
 	StateWaitingForStability    UserState = "waiting_for_stability"
 	StateWaitingForClarity      UserState = "waiting_for_clarity"
+	StateWaitingForSpeed UserState = "waiting_for_speed"
 )
 
 type UserData struct {
@@ -26,6 +28,7 @@ type UserData struct {
 	GeneratedScript string
 	Stability		float32
 	Clarity			float32
+	Speed float32
 }
 
 // NewDefaultUserData creates a user with initial idle state.
@@ -34,6 +37,8 @@ func NewDefaultUserData() *UserData {
 		State: StateIdle,
 		Stability: DefaultStability,
 		Clarity:   DefaultClarity,
+		Speed: DefaultSpeed,
+
 	}
 }
 

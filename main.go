@@ -32,7 +32,7 @@ func main() {
 
 	geminiService := ai.NewGeminiService(geminiKeyManager)
 	
-	elevenlabsService, err := ai.NewElevenLabsService(elevenlabsKeyManager, cfg.ElevenLabsModelID)
+	elevenlabsService, err := ai.NewElevenLabsService(elevenlabsKeyManager, cfg.ElevenLabsModelID, cfg.ProxyURL)
 	if err != nil {
 		log.Fatalf("FATAL: Could not initialize ElevenLabs service: %v", err)
 	}

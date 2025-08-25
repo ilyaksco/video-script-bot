@@ -19,6 +19,7 @@ type Config struct {
 	StorageChannelID  int64
 	SaweriaLink       string
 	BuyMeACoffeeLink  string
+	ProxyURL          string 
 }
 
 func LoadConfig() *Config {
@@ -46,6 +47,7 @@ func LoadConfig() *Config {
 		StorageChannelID:  storageID,
 		SaweriaLink:       getEnv("SAWERIA_LINK", "", false),
 		BuyMeACoffeeLink:  getEnv("BUYMEACOFFEE_LINK", "", false),
+		ProxyURL:          getEnv("PROXY_URL", "", false), 
 	}
 }
 
